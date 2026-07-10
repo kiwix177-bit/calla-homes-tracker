@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calla Homes - daily price tracker (DEMO: simulated 3 weeks of data)</title>
+<style>
+  :root {
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --gridline: #e1e0d9;
+    --border: rgba(11,11,11,0.10);
+    --series-1: #2a78d6;
+    --series-1-muted: #9ec5f4;
+    --good: #006300;
+    --gone-bg: #efefec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19;
+      --page: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --gridline: #2c2c2a;
+      --border: rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+      --series-1-muted: #184f95;
+      --good: #0ca30c;
+      --gone-bg: #232320;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  header { max-width: 1100px; margin: 0 auto 28px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 14px; margin: 0 0 16px; }
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat-tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; min-width: 140px;
+  }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); }
+  .stat-tile .value { font-size: 24px; font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; }
+  .floorplan-section { margin-bottom: 32px; }
+  h2 { font-size: 17px; border-bottom: 1px solid var(--gridline); padding-bottom: 8px; }
+  .floorplan-count { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+  .unit-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px; margin-top: 12px;
+  }
+  .unit-card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; cursor: pointer;
+  }
+  .unit-card:hover, .unit-card:focus-visible {
+    border-color: var(--series-1); outline: none;
+  }
+  .unit-card-gone { background: var(--gone-bg); opacity: 0.65; filter: grayscale(60%); }
+  .unit-card-head { display: flex; justify-content: space-between; align-items: center; }
+  .unit-number { font-weight: 600; font-size: 15px; }
+  .unit-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .unit-price { font-size: 22px; font-weight: 600; margin-top: 6px; }
+  .delta { display: block; font-size: 12px; margin-top: 2px; }
+  .delta-down { color: var(--good); }
+  .delta-up { color: var(--text-secondary); }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .badge-specials { background: var(--series-1-muted); color: var(--text-primary); }
+  .badge-gone { background: var(--gridline); color: var(--text-secondary); }
+  .unit-footnote {
+    font-size: 11px; color: var(--text-muted); margin-top: 6px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .unit-expand-hint { color: var(--series-1); white-space: nowrap; }
+  .sparkline { width: 100%; height: 56px; margin-top: 8px; display: block; }
+  .spark-line { stroke: var(--series-1-muted); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .spark-line-muted { stroke: var(--text-muted); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: 0.6; }
+  .spark-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .spark-dot-muted { fill: var(--text-muted); stroke: var(--surface-1); stroke-width: 2; }
+  .spark-point-muted { fill: var(--series-1-muted); }
+  circle[data-price] { cursor: pointer; }
+  footer { max-width: 1100px; margin: 24px auto; color: var(--text-muted); font-size: 12px; }
+
+  .chart-tooltip {
+    position: fixed; z-index: 1000; pointer-events: none;
+    background: var(--text-primary); color: var(--surface-1);
+    font-size: 12px; padding: 4px 8px; border-radius: 6px;
+    white-space: nowrap; display: none;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(11,11,11,0.5);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px; z-index: 900;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface-1); border-radius: 12px; border: 1px solid var(--border);
+    max-width: 720px; width: 100%; max-height: 88vh; overflow-y: auto;
+    padding: 20px 24px 24px;
+  }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .modal-title { font-size: 18px; font-weight: 600; margin: 0; }
+  .modal-close {
+    background: none; border: none; color: var(--text-secondary); font-size: 22px;
+    line-height: 1; cursor: pointer; padding: 2px 6px;
+  }
+  .modal-close:hover { color: var(--text-primary); }
+  .modal-meta { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+  .modal-status { font-size: 12px; margin-top: 8px; display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--gridline); color: var(--text-secondary); }
+  .modal-chart { width: 100%; height: 260px; margin-top: 16px; display: block; }
+  .modal-line { stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .modal-point { fill: var(--series-1-muted); cursor: pointer; }
+  .modal-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; cursor: pointer; }
+  .modal-gridline { stroke: var(--gridline); stroke-width: 1; }
+  .modal-axis-label { fill: var(--text-muted); font-size: 10px; }
+  .modal-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  .modal-table th, .modal-table td {
+    text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  .modal-table th { color: var(--text-secondary); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Calla Homes - daily price tracker (DEMO: simulated 3 weeks of data)</h1>
+  <p class="subtitle">Last checked 2026-07-09 08:00 AM</p>
+  <div class="stat-row">
+    <div class="stat-tile"><div class="label">Available now</div><div class="value">19</div></div>
+    <div class="stat-tile"><div class="label">Floor plans</div><div class="value">2</div></div>
+    <div class="stat-tile"><div class="label">Gone (tracked)</div><div class="value">2</div></div>
+  </div>
+</header>
+<main>
+
+        <section class="floorplan-section">
+          <h2>B1B <span class="floorplan-count">2 Bed / 2.5 Bath &middot; 1 available</span></h2>
+          <div class="unit-grid">
+            
+    <div class="unit-card" data-unit-key="B1B|942" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 942">
+      <div class="unit-card-head">
+        <span class="unit-number">#942</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">2 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,069.00</div>
+      <span class="delta delta-down">↓ $15.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,244.00 on 2026-06-19 to $2,069.00 on 2026-07-09"><path d="M 8.0 8.0 L 18.2 14.9 L 28.4 21.7 L 38.6 17.1 L 48.8 17.1 L 59.0 20.6 L 69.2 24.0 L 79.4 27.4 L 89.6 22.9 L 99.8 29.7 L 110.0 25.1 L 120.2 20.6 L 130.4 17.1 L 140.6 24.0 L 150.8 20.6 L 161.0 20.6 L 171.2 27.4 L 181.4 34.3 L 191.6 41.1 L 201.8 44.6 L 212.0 48.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="8.0" r="2.5" data-date="2026-06-19" data-price="2244.0"><title>2026-06-19: $2,244.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="14.9" r="2.5" data-date="2026-06-20" data-price="2214.0"><title>2026-06-20: $2,214.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="21.7" r="2.5" data-date="2026-06-21" data-price="2184.0"><title>2026-06-21: $2,184.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="17.1" r="2.5" data-date="2026-06-22" data-price="2204.0"><title>2026-06-22: $2,204.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="17.1" r="2.5" data-date="2026-06-23" data-price="2204.0"><title>2026-06-23: $2,204.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="20.6" r="2.5" data-date="2026-06-24" data-price="2189.0"><title>2026-06-24: $2,189.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="24.0" r="2.5" data-date="2026-06-25" data-price="2174.0"><title>2026-06-25: $2,174.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="27.4" r="2.5" data-date="2026-06-26" data-price="2159.0"><title>2026-06-26: $2,159.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="22.9" r="2.5" data-date="2026-06-27" data-price="2179.0"><title>2026-06-27: $2,179.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="29.7" r="2.5" data-date="2026-06-28" data-price="2149.0"><title>2026-06-28: $2,149.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="25.1" r="2.5" data-date="2026-06-29" data-price="2169.0"><title>2026-06-29: $2,169.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="20.6" r="2.5" data-date="2026-06-30" data-price="2189.0"><title>2026-06-30: $2,189.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="17.1" r="2.5" data-date="2026-07-01" data-price="2204.0"><title>2026-07-01: $2,204.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="24.0" r="2.5" data-date="2026-07-02" data-price="2174.0"><title>2026-07-02: $2,174.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="20.6" r="2.5" data-date="2026-07-03" data-price="2189.0"><title>2026-07-03: $2,189.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="20.6" r="2.5" data-date="2026-07-04" data-price="2189.0"><title>2026-07-04: $2,189.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="27.4" r="2.5" data-date="2026-07-05" data-price="2159.0"><title>2026-07-05: $2,159.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="34.3" r="2.5" data-date="2026-07-06" data-price="2129.0"><title>2026-07-06: $2,129.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="41.1" r="2.5" data-date="2026-07-07" data-price="2099.0"><title>2026-07-07: $2,099.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="44.6" r="2.5" data-date="2026-07-08" data-price="2084.0"><title>2026-07-08: $2,084.00</title></circle><circle class="spark-dot" cx="212.0" cy="48.0" r="4" data-date="2026-07-09" data-price="2069.0"><title>2026-07-09: $2,069.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+          </div>
+        </section>
+        
+        <section class="floorplan-section">
+          <h2>C1B <span class="floorplan-count">3 Bed / 2.5 Bath &middot; 18 available</span></h2>
+          <div class="unit-grid">
+            
+    <div class="unit-card" data-unit-key="C1B|914" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 914">
+      <div class="unit-card-head">
+        <span class="unit-number">#914</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,849.00</div>
+      <span class="delta delta-up">↑ $20.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,714.00 on 2026-06-19 to $2,849.00 on 2026-07-09"><path d="M 8.0 44.0 L 18.2 40.0 L 28.4 48.0 L 38.6 44.0 L 48.8 48.0 L 59.0 42.7 L 69.2 37.3 L 79.4 32.0 L 89.6 28.0 L 99.8 28.0 L 110.0 32.0 L 120.2 32.0 L 130.4 28.0 L 140.6 28.0 L 150.8 21.3 L 161.0 14.7 L 171.2 22.7 L 181.4 16.0 L 191.6 9.3 L 201.8 13.3 L 212.0 8.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="44.0" r="2.5" data-date="2026-06-19" data-price="2714.0"><title>2026-06-19: $2,714.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="40.0" r="2.5" data-date="2026-06-20" data-price="2729.0"><title>2026-06-20: $2,729.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="48.0" r="2.5" data-date="2026-06-21" data-price="2699.0"><title>2026-06-21: $2,699.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="44.0" r="2.5" data-date="2026-06-22" data-price="2714.0"><title>2026-06-22: $2,714.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="48.0" r="2.5" data-date="2026-06-23" data-price="2699.0"><title>2026-06-23: $2,699.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="42.7" r="2.5" data-date="2026-06-24" data-price="2719.0"><title>2026-06-24: $2,719.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="37.3" r="2.5" data-date="2026-06-25" data-price="2739.0"><title>2026-06-25: $2,739.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="32.0" r="2.5" data-date="2026-06-26" data-price="2759.0"><title>2026-06-26: $2,759.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="28.0" r="2.5" data-date="2026-06-27" data-price="2774.0"><title>2026-06-27: $2,774.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="28.0" r="2.5" data-date="2026-06-28" data-price="2774.0"><title>2026-06-28: $2,774.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="32.0" r="2.5" data-date="2026-06-29" data-price="2759.0"><title>2026-06-29: $2,759.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="32.0" r="2.5" data-date="2026-06-30" data-price="2759.0"><title>2026-06-30: $2,759.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="28.0" r="2.5" data-date="2026-07-01" data-price="2774.0"><title>2026-07-01: $2,774.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="28.0" r="2.5" data-date="2026-07-02" data-price="2774.0"><title>2026-07-02: $2,774.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="21.3" r="2.5" data-date="2026-07-03" data-price="2799.0"><title>2026-07-03: $2,799.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="14.7" r="2.5" data-date="2026-07-04" data-price="2824.0"><title>2026-07-04: $2,824.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="22.7" r="2.5" data-date="2026-07-05" data-price="2794.0"><title>2026-07-05: $2,794.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="16.0" r="2.5" data-date="2026-07-06" data-price="2819.0"><title>2026-07-06: $2,819.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="9.3" r="2.5" data-date="2026-07-07" data-price="2844.0"><title>2026-07-07: $2,844.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="13.3" r="2.5" data-date="2026-07-08" data-price="2829.0"><title>2026-07-08: $2,829.00</title></circle><circle class="spark-dot" cx="212.0" cy="8.0" r="4" data-date="2026-07-09" data-price="2849.0"><title>2026-07-09: $2,849.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|924" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 924">
+      <div class="unit-card-head">
+        <span class="unit-number">#924</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,724.00</div>
+      <span class="delta delta-up">↑ $25.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,669.00 on 2026-06-19 to $2,724.00 on 2026-07-09"><path d="M 8.0 38.0 L 18.2 38.0 L 28.4 48.0 L 38.6 43.0 L 48.8 43.0 L 59.0 34.7 L 69.2 28.0 L 79.4 23.0 L 89.6 14.7 L 99.8 14.7 L 110.0 9.7 L 120.2 14.7 L 130.4 8.0 L 140.6 18.0 L 150.8 28.0 L 161.0 21.3 L 171.2 26.3 L 181.4 18.0 L 191.6 18.0 L 201.8 28.0 L 212.0 19.7" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="38.0" r="2.5" data-date="2026-06-19" data-price="2669.0"><title>2026-06-19: $2,669.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="38.0" r="2.5" data-date="2026-06-20" data-price="2669.0"><title>2026-06-20: $2,669.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="48.0" r="2.5" data-date="2026-06-21" data-price="2639.0"><title>2026-06-21: $2,639.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="43.0" r="2.5" data-date="2026-06-22" data-price="2654.0"><title>2026-06-22: $2,654.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="43.0" r="2.5" data-date="2026-06-23" data-price="2654.0"><title>2026-06-23: $2,654.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="34.7" r="2.5" data-date="2026-06-24" data-price="2679.0"><title>2026-06-24: $2,679.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="28.0" r="2.5" data-date="2026-06-25" data-price="2699.0"><title>2026-06-25: $2,699.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="23.0" r="2.5" data-date="2026-06-26" data-price="2714.0"><title>2026-06-26: $2,714.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="14.7" r="2.5" data-date="2026-06-27" data-price="2739.0"><title>2026-06-27: $2,739.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="14.7" r="2.5" data-date="2026-06-28" data-price="2739.0"><title>2026-06-28: $2,739.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="9.7" r="2.5" data-date="2026-06-29" data-price="2754.0"><title>2026-06-29: $2,754.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="14.7" r="2.5" data-date="2026-06-30" data-price="2739.0"><title>2026-06-30: $2,739.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="8.0" r="2.5" data-date="2026-07-01" data-price="2759.0"><title>2026-07-01: $2,759.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="18.0" r="2.5" data-date="2026-07-02" data-price="2729.0"><title>2026-07-02: $2,729.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="28.0" r="2.5" data-date="2026-07-03" data-price="2699.0"><title>2026-07-03: $2,699.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="21.3" r="2.5" data-date="2026-07-04" data-price="2719.0"><title>2026-07-04: $2,719.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="26.3" r="2.5" data-date="2026-07-05" data-price="2704.0"><title>2026-07-05: $2,704.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="18.0" r="2.5" data-date="2026-07-06" data-price="2729.0"><title>2026-07-06: $2,729.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="18.0" r="2.5" data-date="2026-07-07" data-price="2729.0"><title>2026-07-07: $2,729.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="28.0" r="2.5" data-date="2026-07-08" data-price="2699.0"><title>2026-07-08: $2,699.00</title></circle><circle class="spark-dot" cx="212.0" cy="19.7" r="4" data-date="2026-07-09" data-price="2724.0"><title>2026-07-09: $2,724.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|926" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 926">
+      <div class="unit-card-head">
+        <span class="unit-number">#926</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,779.00</div>
+      <span class="delta delta-up">↑ $20.00 since 2026-07-08</span>
+      <div class="unit-meta">7/17/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,684.00 on 2026-06-19 to $2,779.00 on 2026-07-09"><path d="M 8.0 46.0 L 18.2 36.0 L 28.4 48.0 L 38.6 48.0 L 48.8 48.0 L 59.0 48.0 L 69.2 40.0 L 79.4 30.0 L 89.6 30.0 L 99.8 36.0 L 110.0 36.0 L 120.2 36.0 L 130.4 42.0 L 140.6 34.0 L 150.8 34.0 L 161.0 26.0 L 171.2 18.0 L 181.4 10.0 L 191.6 22.0 L 201.8 16.0 L 212.0 8.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="46.0" r="2.5" data-date="2026-06-19" data-price="2684.0"><title>2026-06-19: $2,684.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="36.0" r="2.5" data-date="2026-06-20" data-price="2709.0"><title>2026-06-20: $2,709.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="48.0" r="2.5" data-date="2026-06-21" data-price="2679.0"><title>2026-06-21: $2,679.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="48.0" r="2.5" data-date="2026-06-22" data-price="2679.0"><title>2026-06-22: $2,679.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="48.0" r="2.5" data-date="2026-06-23" data-price="2679.0"><title>2026-06-23: $2,679.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="48.0" r="2.5" data-date="2026-06-24" data-price="2679.0"><title>2026-06-24: $2,679.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="40.0" r="2.5" data-date="2026-06-25" data-price="2699.0"><title>2026-06-25: $2,699.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="30.0" r="2.5" data-date="2026-06-26" data-price="2724.0"><title>2026-06-26: $2,724.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="30.0" r="2.5" data-date="2026-06-27" data-price="2724.0"><title>2026-06-27: $2,724.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="36.0" r="2.5" data-date="2026-06-28" data-price="2709.0"><title>2026-06-28: $2,709.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="36.0" r="2.5" data-date="2026-06-29" data-price="2709.0"><title>2026-06-29: $2,709.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="36.0" r="2.5" data-date="2026-06-30" data-price="2709.0"><title>2026-06-30: $2,709.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="42.0" r="2.5" data-date="2026-07-01" data-price="2694.0"><title>2026-07-01: $2,694.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="34.0" r="2.5" data-date="2026-07-02" data-price="2714.0"><title>2026-07-02: $2,714.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="34.0" r="2.5" data-date="2026-07-03" data-price="2714.0"><title>2026-07-03: $2,714.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="26.0" r="2.5" data-date="2026-07-04" data-price="2734.0"><title>2026-07-04: $2,734.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="18.0" r="2.5" data-date="2026-07-05" data-price="2754.0"><title>2026-07-05: $2,754.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="10.0" r="2.5" data-date="2026-07-06" data-price="2774.0"><title>2026-07-06: $2,774.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="22.0" r="2.5" data-date="2026-07-07" data-price="2744.0"><title>2026-07-07: $2,744.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="16.0" r="2.5" data-date="2026-07-08" data-price="2759.0"><title>2026-07-08: $2,759.00</title></circle><circle class="spark-dot" cx="212.0" cy="8.0" r="4" data-date="2026-07-09" data-price="2779.0"><title>2026-07-09: $2,779.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|928" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 928">
+      <div class="unit-card-head">
+        <span class="unit-number">#928</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,774.00</div>
+      <span class="delta delta-down">↓ $30.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,684.00 on 2026-06-19 to $2,774.00 on 2026-07-09"><path d="M 8.0 48.0 L 18.2 43.7 L 28.4 38.0 L 38.6 42.3 L 48.8 46.6 L 59.0 46.6 L 69.2 46.6 L 79.4 46.6 L 89.6 40.9 L 99.8 35.1 L 110.0 30.9 L 120.2 35.1 L 130.4 29.4 L 140.6 29.4 L 150.8 22.3 L 161.0 15.1 L 171.2 8.0 L 181.4 16.6 L 191.6 20.9 L 201.8 13.7 L 212.0 22.3" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="48.0" r="2.5" data-date="2026-06-19" data-price="2684.0"><title>2026-06-19: $2,684.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="43.7" r="2.5" data-date="2026-06-20" data-price="2699.0"><title>2026-06-20: $2,699.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="38.0" r="2.5" data-date="2026-06-21" data-price="2719.0"><title>2026-06-21: $2,719.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="42.3" r="2.5" data-date="2026-06-22" data-price="2704.0"><title>2026-06-22: $2,704.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="46.6" r="2.5" data-date="2026-06-23" data-price="2689.0"><title>2026-06-23: $2,689.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="46.6" r="2.5" data-date="2026-06-24" data-price="2689.0"><title>2026-06-24: $2,689.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="46.6" r="2.5" data-date="2026-06-25" data-price="2689.0"><title>2026-06-25: $2,689.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="46.6" r="2.5" data-date="2026-06-26" data-price="2689.0"><title>2026-06-26: $2,689.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="40.9" r="2.5" data-date="2026-06-27" data-price="2709.0"><title>2026-06-27: $2,709.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="35.1" r="2.5" data-date="2026-06-28" data-price="2729.0"><title>2026-06-28: $2,729.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="30.9" r="2.5" data-date="2026-06-29" data-price="2744.0"><title>2026-06-29: $2,744.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="35.1" r="2.5" data-date="2026-06-30" data-price="2729.0"><title>2026-06-30: $2,729.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="29.4" r="2.5" data-date="2026-07-01" data-price="2749.0"><title>2026-07-01: $2,749.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="29.4" r="2.5" data-date="2026-07-02" data-price="2749.0"><title>2026-07-02: $2,749.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="22.3" r="2.5" data-date="2026-07-03" data-price="2774.0"><title>2026-07-03: $2,774.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="15.1" r="2.5" data-date="2026-07-04" data-price="2799.0"><title>2026-07-04: $2,799.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="8.0" r="2.5" data-date="2026-07-05" data-price="2824.0"><title>2026-07-05: $2,824.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="16.6" r="2.5" data-date="2026-07-06" data-price="2794.0"><title>2026-07-06: $2,794.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="20.9" r="2.5" data-date="2026-07-07" data-price="2779.0"><title>2026-07-07: $2,779.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="13.7" r="2.5" data-date="2026-07-08" data-price="2804.0"><title>2026-07-08: $2,804.00</title></circle><circle class="spark-dot" cx="212.0" cy="22.3" r="4" data-date="2026-07-09" data-price="2774.0"><title>2026-07-09: $2,774.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|936" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 936">
+      <div class="unit-card-head">
+        <span class="unit-number">#936</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,729.00</div>
+      <span class="delta delta-up">↑ $15.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,724.00 on 2026-06-19 to $2,729.00 on 2026-07-09"><path d="M 8.0 18.0 L 18.2 18.0 L 28.4 18.0 L 38.6 18.0 L 48.8 38.0 L 59.0 48.0 L 69.2 38.0 L 79.4 24.7 L 89.6 24.7 L 99.8 34.7 L 110.0 21.3 L 120.2 21.3 L 130.4 21.3 L 140.6 8.0 L 150.8 8.0 L 161.0 18.0 L 171.2 18.0 L 181.4 28.0 L 191.6 38.0 L 201.8 24.7 L 212.0 14.7" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="18.0" r="2.5" data-date="2026-06-19" data-price="2724.0"><title>2026-06-19: $2,724.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="18.0" r="2.5" data-date="2026-06-20" data-price="2724.0"><title>2026-06-20: $2,724.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="18.0" r="2.5" data-date="2026-06-21" data-price="2724.0"><title>2026-06-21: $2,724.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="18.0" r="2.5" data-date="2026-06-22" data-price="2724.0"><title>2026-06-22: $2,724.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="38.0" r="2.5" data-date="2026-06-23" data-price="2694.0"><title>2026-06-23: $2,694.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="48.0" r="2.5" data-date="2026-06-24" data-price="2679.0"><title>2026-06-24: $2,679.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="38.0" r="2.5" data-date="2026-06-25" data-price="2694.0"><title>2026-06-25: $2,694.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="24.7" r="2.5" data-date="2026-06-26" data-price="2714.0"><title>2026-06-26: $2,714.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="24.7" r="2.5" data-date="2026-06-27" data-price="2714.0"><title>2026-06-27: $2,714.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="34.7" r="2.5" data-date="2026-06-28" data-price="2699.0"><title>2026-06-28: $2,699.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="21.3" r="2.5" data-date="2026-06-29" data-price="2719.0"><title>2026-06-29: $2,719.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="21.3" r="2.5" data-date="2026-06-30" data-price="2719.0"><title>2026-06-30: $2,719.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="21.3" r="2.5" data-date="2026-07-01" data-price="2719.0"><title>2026-07-01: $2,719.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="8.0" r="2.5" data-date="2026-07-02" data-price="2739.0"><title>2026-07-02: $2,739.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="8.0" r="2.5" data-date="2026-07-03" data-price="2739.0"><title>2026-07-03: $2,739.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="18.0" r="2.5" data-date="2026-07-04" data-price="2724.0"><title>2026-07-04: $2,724.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="18.0" r="2.5" data-date="2026-07-05" data-price="2724.0"><title>2026-07-05: $2,724.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="28.0" r="2.5" data-date="2026-07-06" data-price="2709.0"><title>2026-07-06: $2,709.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="38.0" r="2.5" data-date="2026-07-07" data-price="2694.0"><title>2026-07-07: $2,694.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="24.7" r="2.5" data-date="2026-07-08" data-price="2714.0"><title>2026-07-08: $2,714.00</title></circle><circle class="spark-dot" cx="212.0" cy="14.7" r="4" data-date="2026-07-09" data-price="2729.0"><title>2026-07-09: $2,729.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|946" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 946">
+      <div class="unit-card-head">
+        <span class="unit-number">#946</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,839.00</div>
+      <span class="delta delta-up">↑ $25.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,719.00 on 2026-06-19 to $2,839.00 on 2026-07-09"><path d="M 8.0 43.6 L 18.2 43.6 L 28.4 39.1 L 38.6 48.0 L 48.8 48.0 L 59.0 48.0 L 69.2 43.6 L 79.4 43.6 L 89.6 39.1 L 99.8 39.1 L 110.0 34.7 L 120.2 27.3 L 130.4 36.1 L 140.6 30.2 L 150.8 24.3 L 161.0 33.2 L 171.2 27.3 L 181.4 22.8 L 191.6 15.4 L 201.8 15.4 L 212.0 8.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="43.6" r="2.5" data-date="2026-06-19" data-price="2719.0"><title>2026-06-19: $2,719.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="43.6" r="2.5" data-date="2026-06-20" data-price="2719.0"><title>2026-06-20: $2,719.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="39.1" r="2.5" data-date="2026-06-21" data-price="2734.0"><title>2026-06-21: $2,734.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="48.0" r="2.5" data-date="2026-06-22" data-price="2704.0"><title>2026-06-22: $2,704.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="48.0" r="2.5" data-date="2026-06-23" data-price="2704.0"><title>2026-06-23: $2,704.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="48.0" r="2.5" data-date="2026-06-24" data-price="2704.0"><title>2026-06-24: $2,704.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="43.6" r="2.5" data-date="2026-06-25" data-price="2719.0"><title>2026-06-25: $2,719.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="43.6" r="2.5" data-date="2026-06-26" data-price="2719.0"><title>2026-06-26: $2,719.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="39.1" r="2.5" data-date="2026-06-27" data-price="2734.0"><title>2026-06-27: $2,734.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="39.1" r="2.5" data-date="2026-06-28" data-price="2734.0"><title>2026-06-28: $2,734.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="34.7" r="2.5" data-date="2026-06-29" data-price="2749.0"><title>2026-06-29: $2,749.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="27.3" r="2.5" data-date="2026-06-30" data-price="2774.0"><title>2026-06-30: $2,774.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="36.1" r="2.5" data-date="2026-07-01" data-price="2744.0"><title>2026-07-01: $2,744.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="30.2" r="2.5" data-date="2026-07-02" data-price="2764.0"><title>2026-07-02: $2,764.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="24.3" r="2.5" data-date="2026-07-03" data-price="2784.0"><title>2026-07-03: $2,784.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="33.2" r="2.5" data-date="2026-07-04" data-price="2754.0"><title>2026-07-04: $2,754.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="27.3" r="2.5" data-date="2026-07-05" data-price="2774.0"><title>2026-07-05: $2,774.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="22.8" r="2.5" data-date="2026-07-06" data-price="2789.0"><title>2026-07-06: $2,789.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="15.4" r="2.5" data-date="2026-07-07" data-price="2814.0"><title>2026-07-07: $2,814.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="15.4" r="2.5" data-date="2026-07-08" data-price="2814.0"><title>2026-07-08: $2,814.00</title></circle><circle class="spark-dot" cx="212.0" cy="8.0" r="4" data-date="2026-07-09" data-price="2839.0"><title>2026-07-09: $2,839.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|948" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 948">
+      <div class="unit-card-head">
+        <span class="unit-number">#948</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,784.00</div>
+      <span class="delta delta-up">↑ $20.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,719.00 on 2026-06-19 to $2,784.00 on 2026-07-09"><path d="M 8.0 26.6 L 18.2 26.6 L 28.4 35.1 L 38.6 35.1 L 48.8 35.1 L 59.0 39.4 L 69.2 39.4 L 79.4 48.0 L 89.6 42.3 L 99.8 36.6 L 110.0 36.6 L 120.2 32.3 L 130.4 25.1 L 140.6 29.4 L 150.8 25.1 L 161.0 33.7 L 171.2 26.6 L 181.4 20.9 L 191.6 20.9 L 201.8 13.7 L 212.0 8.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="26.6" r="2.5" data-date="2026-06-19" data-price="2719.0"><title>2026-06-19: $2,719.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="26.6" r="2.5" data-date="2026-06-20" data-price="2719.0"><title>2026-06-20: $2,719.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="35.1" r="2.5" data-date="2026-06-21" data-price="2689.0"><title>2026-06-21: $2,689.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="35.1" r="2.5" data-date="2026-06-22" data-price="2689.0"><title>2026-06-22: $2,689.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="35.1" r="2.5" data-date="2026-06-23" data-price="2689.0"><title>2026-06-23: $2,689.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="39.4" r="2.5" data-date="2026-06-24" data-price="2674.0"><title>2026-06-24: $2,674.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="39.4" r="2.5" data-date="2026-06-25" data-price="2674.0"><title>2026-06-25: $2,674.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="48.0" r="2.5" data-date="2026-06-26" data-price="2644.0"><title>2026-06-26: $2,644.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="42.3" r="2.5" data-date="2026-06-27" data-price="2664.0"><title>2026-06-27: $2,664.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="36.6" r="2.5" data-date="2026-06-28" data-price="2684.0"><title>2026-06-28: $2,684.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="36.6" r="2.5" data-date="2026-06-29" data-price="2684.0"><title>2026-06-29: $2,684.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="32.3" r="2.5" data-date="2026-06-30" data-price="2699.0"><title>2026-06-30: $2,699.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="25.1" r="2.5" data-date="2026-07-01" data-price="2724.0"><title>2026-07-01: $2,724.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="29.4" r="2.5" data-date="2026-07-02" data-price="2709.0"><title>2026-07-02: $2,709.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="25.1" r="2.5" data-date="2026-07-03" data-price="2724.0"><title>2026-07-03: $2,724.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="33.7" r="2.5" data-date="2026-07-04" data-price="2694.0"><title>2026-07-04: $2,694.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="26.6" r="2.5" data-date="2026-07-05" data-price="2719.0"><title>2026-07-05: $2,719.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="20.9" r="2.5" data-date="2026-07-06" data-price="2739.0"><title>2026-07-06: $2,739.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="20.9" r="2.5" data-date="2026-07-07" data-price="2739.0"><title>2026-07-07: $2,739.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="13.7" r="2.5" data-date="2026-07-08" data-price="2764.0"><title>2026-07-08: $2,764.00</title></circle><circle class="spark-dot" cx="212.0" cy="8.0" r="4" data-date="2026-07-09" data-price="2784.0"><title>2026-07-09: $2,784.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|954" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 954">
+      <div class="unit-card-head">
+        <span class="unit-number">#954</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,449.00</div>
+      <span class="delta delta-down">↓ $15.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,439.00 on 2026-06-19 to $2,449.00 on 2026-07-09"><path d="M 8.0 34.7 L 18.2 26.7 L 28.4 34.7 L 38.6 42.7 L 48.8 42.7 L 59.0 29.3 L 69.2 37.3 L 79.4 29.3 L 89.6 16.0 L 99.8 8.0 L 110.0 24.0 L 120.2 16.0 L 130.4 16.0 L 140.6 16.0 L 150.8 32.0 L 161.0 48.0 L 171.2 48.0 L 181.4 34.7 L 191.6 21.3 L 201.8 21.3 L 212.0 29.3" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="34.7" r="2.5" data-date="2026-06-19" data-price="2439.0"><title>2026-06-19: $2,439.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="26.7" r="2.5" data-date="2026-06-20" data-price="2454.0"><title>2026-06-20: $2,454.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="34.7" r="2.5" data-date="2026-06-21" data-price="2439.0"><title>2026-06-21: $2,439.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="42.7" r="2.5" data-date="2026-06-22" data-price="2424.0"><title>2026-06-22: $2,424.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="42.7" r="2.5" data-date="2026-06-23" data-price="2424.0"><title>2026-06-23: $2,424.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="29.3" r="2.5" data-date="2026-06-24" data-price="2449.0"><title>2026-06-24: $2,449.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="37.3" r="2.5" data-date="2026-06-25" data-price="2434.0"><title>2026-06-25: $2,434.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="29.3" r="2.5" data-date="2026-06-26" data-price="2449.0"><title>2026-06-26: $2,449.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="16.0" r="2.5" data-date="2026-06-27" data-price="2474.0"><title>2026-06-27: $2,474.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="8.0" r="2.5" data-date="2026-06-28" data-price="2489.0"><title>2026-06-28: $2,489.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="24.0" r="2.5" data-date="2026-06-29" data-price="2459.0"><title>2026-06-29: $2,459.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="16.0" r="2.5" data-date="2026-06-30" data-price="2474.0"><title>2026-06-30: $2,474.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="16.0" r="2.5" data-date="2026-07-01" data-price="2474.0"><title>2026-07-01: $2,474.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="16.0" r="2.5" data-date="2026-07-02" data-price="2474.0"><title>2026-07-02: $2,474.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="32.0" r="2.5" data-date="2026-07-03" data-price="2444.0"><title>2026-07-03: $2,444.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="48.0" r="2.5" data-date="2026-07-04" data-price="2414.0"><title>2026-07-04: $2,414.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="48.0" r="2.5" data-date="2026-07-05" data-price="2414.0"><title>2026-07-05: $2,414.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="34.7" r="2.5" data-date="2026-07-06" data-price="2439.0"><title>2026-07-06: $2,439.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="21.3" r="2.5" data-date="2026-07-07" data-price="2464.0"><title>2026-07-07: $2,464.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="21.3" r="2.5" data-date="2026-07-08" data-price="2464.0"><title>2026-07-08: $2,464.00</title></circle><circle class="spark-dot" cx="212.0" cy="29.3" r="4" data-date="2026-07-09" data-price="2449.0"><title>2026-07-09: $2,449.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|958" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 958">
+      <div class="unit-card-head">
+        <span class="unit-number">#958</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,719.00</div>
+      <span class="delta delta-up">↑ $25.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,669.00 on 2026-06-19 to $2,719.00 on 2026-07-09"><path d="M 8.0 26.2 L 18.2 31.6 L 28.4 26.2 L 38.6 37.1 L 48.8 48.0 L 59.0 40.7 L 69.2 40.7 L 79.4 31.6 L 89.6 42.5 L 99.8 33.5 L 110.0 28.0 L 120.2 18.9 L 130.4 24.4 L 140.6 29.8 L 150.8 22.5 L 161.0 22.5 L 171.2 17.1 L 181.4 22.5 L 191.6 22.5 L 201.8 17.1 L 212.0 8.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="26.2" r="2.5" data-date="2026-06-19" data-price="2669.0"><title>2026-06-19: $2,669.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="31.6" r="2.5" data-date="2026-06-20" data-price="2654.0"><title>2026-06-20: $2,654.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="26.2" r="2.5" data-date="2026-06-21" data-price="2669.0"><title>2026-06-21: $2,669.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="37.1" r="2.5" data-date="2026-06-22" data-price="2639.0"><title>2026-06-22: $2,639.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="48.0" r="2.5" data-date="2026-06-23" data-price="2609.0"><title>2026-06-23: $2,609.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="40.7" r="2.5" data-date="2026-06-24" data-price="2629.0"><title>2026-06-24: $2,629.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="40.7" r="2.5" data-date="2026-06-25" data-price="2629.0"><title>2026-06-25: $2,629.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="31.6" r="2.5" data-date="2026-06-26" data-price="2654.0"><title>2026-06-26: $2,654.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="42.5" r="2.5" data-date="2026-06-27" data-price="2624.0"><title>2026-06-27: $2,624.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="33.5" r="2.5" data-date="2026-06-28" data-price="2649.0"><title>2026-06-28: $2,649.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="28.0" r="2.5" data-date="2026-06-29" data-price="2664.0"><title>2026-06-29: $2,664.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="18.9" r="2.5" data-date="2026-06-30" data-price="2689.0"><title>2026-06-30: $2,689.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="24.4" r="2.5" data-date="2026-07-01" data-price="2674.0"><title>2026-07-01: $2,674.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="29.8" r="2.5" data-date="2026-07-02" data-price="2659.0"><title>2026-07-02: $2,659.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="22.5" r="2.5" data-date="2026-07-03" data-price="2679.0"><title>2026-07-03: $2,679.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="22.5" r="2.5" data-date="2026-07-04" data-price="2679.0"><title>2026-07-04: $2,679.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="17.1" r="2.5" data-date="2026-07-05" data-price="2694.0"><title>2026-07-05: $2,694.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="22.5" r="2.5" data-date="2026-07-06" data-price="2679.0"><title>2026-07-06: $2,679.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="22.5" r="2.5" data-date="2026-07-07" data-price="2679.0"><title>2026-07-07: $2,679.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="17.1" r="2.5" data-date="2026-07-08" data-price="2694.0"><title>2026-07-08: $2,694.00</title></circle><circle class="spark-dot" cx="212.0" cy="8.0" r="4" data-date="2026-07-09" data-price="2719.0"><title>2026-07-09: $2,719.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|966" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 966">
+      <div class="unit-card-head">
+        <span class="unit-number">#966</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,749.00</div>
+      <span class="delta delta-down">↓ $30.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,714.00 on 2026-06-19 to $2,749.00 on 2026-07-09"><path d="M 8.0 43.7 L 18.2 43.7 L 28.4 48.0 L 38.6 43.7 L 48.8 36.6 L 59.0 30.9 L 69.2 25.1 L 79.4 29.4 L 89.6 23.7 L 99.8 23.7 L 110.0 23.7 L 120.2 18.0 L 130.4 12.3 L 140.6 12.3 L 150.8 12.3 L 161.0 8.0 L 171.2 8.0 L 181.4 16.6 L 191.6 20.9 L 201.8 25.1 L 212.0 33.7" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="43.7" r="2.5" data-date="2026-06-19" data-price="2714.0"><title>2026-06-19: $2,714.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="43.7" r="2.5" data-date="2026-06-20" data-price="2714.0"><title>2026-06-20: $2,714.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="48.0" r="2.5" data-date="2026-06-21" data-price="2699.0"><title>2026-06-21: $2,699.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="43.7" r="2.5" data-date="2026-06-22" data-price="2714.0"><title>2026-06-22: $2,714.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="36.6" r="2.5" data-date="2026-06-23" data-price="2739.0"><title>2026-06-23: $2,739.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="30.9" r="2.5" data-date="2026-06-24" data-price="2759.0"><title>2026-06-24: $2,759.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="25.1" r="2.5" data-date="2026-06-25" data-price="2779.0"><title>2026-06-25: $2,779.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="29.4" r="2.5" data-date="2026-06-26" data-price="2764.0"><title>2026-06-26: $2,764.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="23.7" r="2.5" data-date="2026-06-27" data-price="2784.0"><title>2026-06-27: $2,784.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="23.7" r="2.5" data-date="2026-06-28" data-price="2784.0"><title>2026-06-28: $2,784.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="23.7" r="2.5" data-date="2026-06-29" data-price="2784.0"><title>2026-06-29: $2,784.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="18.0" r="2.5" data-date="2026-06-30" data-price="2804.0"><title>2026-06-30: $2,804.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="12.3" r="2.5" data-date="2026-07-01" data-price="2824.0"><title>2026-07-01: $2,824.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="12.3" r="2.5" data-date="2026-07-02" data-price="2824.0"><title>2026-07-02: $2,824.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="12.3" r="2.5" data-date="2026-07-03" data-price="2824.0"><title>2026-07-03: $2,824.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="8.0" r="2.5" data-date="2026-07-04" data-price="2839.0"><title>2026-07-04: $2,839.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="8.0" r="2.5" data-date="2026-07-05" data-price="2839.0"><title>2026-07-05: $2,839.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="16.6" r="2.5" data-date="2026-07-06" data-price="2809.0"><title>2026-07-06: $2,809.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="20.9" r="2.5" data-date="2026-07-07" data-price="2794.0"><title>2026-07-07: $2,794.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="25.1" r="2.5" data-date="2026-07-08" data-price="2779.0"><title>2026-07-08: $2,779.00</title></circle><circle class="spark-dot" cx="212.0" cy="33.7" r="4" data-date="2026-07-09" data-price="2749.0"><title>2026-07-09: $2,749.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|968" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 968">
+      <div class="unit-card-head">
+        <span class="unit-number">#968</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,554.00</div>
+      
+      <div class="unit-meta">7/21/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,699.00 on 2026-06-19 to $2,554.00 on 2026-07-09"><path d="M 8.0 8.0 L 18.2 16.3 L 28.4 12.1 L 38.6 8.0 L 48.8 12.1 L 59.0 8.0 L 69.2 12.1 L 79.4 20.4 L 89.6 28.7 L 99.8 23.2 L 110.0 17.7 L 120.2 25.9 L 130.4 30.1 L 140.6 38.3 L 150.8 46.6 L 161.0 39.7 L 171.2 39.7 L 181.4 48.0 L 191.6 43.9 L 201.8 48.0 L 212.0 48.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="8.0" r="2.5" data-date="2026-06-19" data-price="2699.0"><title>2026-06-19: $2,699.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="16.3" r="2.5" data-date="2026-06-20" data-price="2669.0"><title>2026-06-20: $2,669.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="12.1" r="2.5" data-date="2026-06-21" data-price="2684.0"><title>2026-06-21: $2,684.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="8.0" r="2.5" data-date="2026-06-22" data-price="2699.0"><title>2026-06-22: $2,699.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="12.1" r="2.5" data-date="2026-06-23" data-price="2684.0"><title>2026-06-23: $2,684.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="8.0" r="2.5" data-date="2026-06-24" data-price="2699.0"><title>2026-06-24: $2,699.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="12.1" r="2.5" data-date="2026-06-25" data-price="2684.0"><title>2026-06-25: $2,684.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="20.4" r="2.5" data-date="2026-06-26" data-price="2654.0"><title>2026-06-26: $2,654.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="28.7" r="2.5" data-date="2026-06-27" data-price="2624.0"><title>2026-06-27: $2,624.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="23.2" r="2.5" data-date="2026-06-28" data-price="2644.0"><title>2026-06-28: $2,644.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="17.7" r="2.5" data-date="2026-06-29" data-price="2664.0"><title>2026-06-29: $2,664.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="25.9" r="2.5" data-date="2026-06-30" data-price="2634.0"><title>2026-06-30: $2,634.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="30.1" r="2.5" data-date="2026-07-01" data-price="2619.0"><title>2026-07-01: $2,619.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="38.3" r="2.5" data-date="2026-07-02" data-price="2589.0"><title>2026-07-02: $2,589.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="46.6" r="2.5" data-date="2026-07-03" data-price="2559.0"><title>2026-07-03: $2,559.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="39.7" r="2.5" data-date="2026-07-04" data-price="2584.0"><title>2026-07-04: $2,584.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="39.7" r="2.5" data-date="2026-07-05" data-price="2584.0"><title>2026-07-05: $2,584.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="48.0" r="2.5" data-date="2026-07-06" data-price="2554.0"><title>2026-07-06: $2,554.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="43.9" r="2.5" data-date="2026-07-07" data-price="2569.0"><title>2026-07-07: $2,569.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="48.0" r="2.5" data-date="2026-07-08" data-price="2554.0"><title>2026-07-08: $2,554.00</title></circle><circle class="spark-dot" cx="212.0" cy="48.0" r="4" data-date="2026-07-09" data-price="2554.0"><title>2026-07-09: $2,554.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|978" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 978">
+      <div class="unit-card-head">
+        <span class="unit-number">#978</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,734.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,719.00 on 2026-06-19 to $2,734.00 on 2026-07-09"><path d="M 8.0 40.9 L 18.2 40.9 L 28.4 48.0 L 38.6 40.9 L 48.8 48.0 L 59.0 38.6 L 69.2 31.5 L 79.4 24.5 L 89.6 24.5 L 99.8 31.5 L 110.0 19.8 L 120.2 19.8 L 130.4 8.0 L 140.6 8.0 L 150.8 15.1 L 161.0 29.2 L 171.2 43.3 L 181.4 33.9 L 191.6 33.9 L 201.8 33.9 L 212.0 33.9" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="40.9" r="2.5" data-date="2026-06-19" data-price="2719.0"><title>2026-06-19: $2,719.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="40.9" r="2.5" data-date="2026-06-20" data-price="2719.0"><title>2026-06-20: $2,719.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="48.0" r="2.5" data-date="2026-06-21" data-price="2704.0"><title>2026-06-21: $2,704.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="40.9" r="2.5" data-date="2026-06-22" data-price="2719.0"><title>2026-06-22: $2,719.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="48.0" r="2.5" data-date="2026-06-23" data-price="2704.0"><title>2026-06-23: $2,704.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="38.6" r="2.5" data-date="2026-06-24" data-price="2724.0"><title>2026-06-24: $2,724.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="31.5" r="2.5" data-date="2026-06-25" data-price="2739.0"><title>2026-06-25: $2,739.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="24.5" r="2.5" data-date="2026-06-26" data-price="2754.0"><title>2026-06-26: $2,754.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="24.5" r="2.5" data-date="2026-06-27" data-price="2754.0"><title>2026-06-27: $2,754.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="31.5" r="2.5" data-date="2026-06-28" data-price="2739.0"><title>2026-06-28: $2,739.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="19.8" r="2.5" data-date="2026-06-29" data-price="2764.0"><title>2026-06-29: $2,764.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="19.8" r="2.5" data-date="2026-06-30" data-price="2764.0"><title>2026-06-30: $2,764.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="8.0" r="2.5" data-date="2026-07-01" data-price="2789.0"><title>2026-07-01: $2,789.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="8.0" r="2.5" data-date="2026-07-02" data-price="2789.0"><title>2026-07-02: $2,789.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="15.1" r="2.5" data-date="2026-07-03" data-price="2774.0"><title>2026-07-03: $2,774.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="29.2" r="2.5" data-date="2026-07-04" data-price="2744.0"><title>2026-07-04: $2,744.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="43.3" r="2.5" data-date="2026-07-05" data-price="2714.0"><title>2026-07-05: $2,714.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="33.9" r="2.5" data-date="2026-07-06" data-price="2734.0"><title>2026-07-06: $2,734.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="33.9" r="2.5" data-date="2026-07-07" data-price="2734.0"><title>2026-07-07: $2,734.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="33.9" r="2.5" data-date="2026-07-08" data-price="2734.0"><title>2026-07-08: $2,734.00</title></circle><circle class="spark-dot" cx="212.0" cy="33.9" r="4" data-date="2026-07-09" data-price="2734.0"><title>2026-07-09: $2,734.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|980" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 980">
+      <div class="unit-card-head">
+        <span class="unit-number">#980</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,474.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,449.00 on 2026-06-19 to $2,474.00 on 2026-07-09"><path d="M 8.0 48.0 L 18.2 48.0 L 28.4 36.2 L 38.6 26.8 L 48.8 40.9 L 59.0 31.5 L 69.2 22.1 L 79.4 12.7 L 89.6 26.8 L 99.8 40.9 L 110.0 40.9 L 120.2 31.5 L 130.4 31.5 L 140.6 19.8 L 150.8 8.0 L 161.0 22.1 L 171.2 29.2 L 181.4 36.2 L 191.6 43.3 L 201.8 36.2 L 212.0 36.2" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="48.0" r="2.5" data-date="2026-06-19" data-price="2449.0"><title>2026-06-19: $2,449.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="48.0" r="2.5" data-date="2026-06-20" data-price="2449.0"><title>2026-06-20: $2,449.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="36.2" r="2.5" data-date="2026-06-21" data-price="2474.0"><title>2026-06-21: $2,474.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="26.8" r="2.5" data-date="2026-06-22" data-price="2494.0"><title>2026-06-22: $2,494.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="40.9" r="2.5" data-date="2026-06-23" data-price="2464.0"><title>2026-06-23: $2,464.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="31.5" r="2.5" data-date="2026-06-24" data-price="2484.0"><title>2026-06-24: $2,484.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="22.1" r="2.5" data-date="2026-06-25" data-price="2504.0"><title>2026-06-25: $2,504.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="12.7" r="2.5" data-date="2026-06-26" data-price="2524.0"><title>2026-06-26: $2,524.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="26.8" r="2.5" data-date="2026-06-27" data-price="2494.0"><title>2026-06-27: $2,494.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="40.9" r="2.5" data-date="2026-06-28" data-price="2464.0"><title>2026-06-28: $2,464.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="40.9" r="2.5" data-date="2026-06-29" data-price="2464.0"><title>2026-06-29: $2,464.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="31.5" r="2.5" data-date="2026-06-30" data-price="2484.0"><title>2026-06-30: $2,484.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="31.5" r="2.5" data-date="2026-07-01" data-price="2484.0"><title>2026-07-01: $2,484.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="19.8" r="2.5" data-date="2026-07-02" data-price="2509.0"><title>2026-07-02: $2,509.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="8.0" r="2.5" data-date="2026-07-03" data-price="2534.0"><title>2026-07-03: $2,534.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="22.1" r="2.5" data-date="2026-07-04" data-price="2504.0"><title>2026-07-04: $2,504.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="29.2" r="2.5" data-date="2026-07-05" data-price="2489.0"><title>2026-07-05: $2,489.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="36.2" r="2.5" data-date="2026-07-06" data-price="2474.0"><title>2026-07-06: $2,474.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="43.3" r="2.5" data-date="2026-07-07" data-price="2459.0"><title>2026-07-07: $2,459.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="36.2" r="2.5" data-date="2026-07-08" data-price="2474.0"><title>2026-07-08: $2,474.00</title></circle><circle class="spark-dot" cx="212.0" cy="36.2" r="4" data-date="2026-07-09" data-price="2474.0"><title>2026-07-09: $2,474.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|984" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 984">
+      <div class="unit-card-head">
+        <span class="unit-number">#984</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,504.00</div>
+      <span class="delta delta-up">↑ $25.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,484.00 on 2026-06-19 to $2,504.00 on 2026-07-09"><path d="M 8.0 32.4 L 18.2 32.4 L 28.4 39.1 L 38.6 39.1 L 48.8 39.1 L 59.0 45.8 L 69.2 34.7 L 79.4 48.0 L 89.6 48.0 L 99.8 36.9 L 110.0 25.8 L 120.2 14.7 L 130.4 8.0 L 140.6 21.3 L 150.8 34.7 L 161.0 25.8 L 171.2 19.1 L 181.4 8.0 L 191.6 21.3 L 201.8 34.7 L 212.0 23.6" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="32.4" r="2.5" data-date="2026-06-19" data-price="2484.0"><title>2026-06-19: $2,484.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="32.4" r="2.5" data-date="2026-06-20" data-price="2484.0"><title>2026-06-20: $2,484.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="39.1" r="2.5" data-date="2026-06-21" data-price="2469.0"><title>2026-06-21: $2,469.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="39.1" r="2.5" data-date="2026-06-22" data-price="2469.0"><title>2026-06-22: $2,469.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="39.1" r="2.5" data-date="2026-06-23" data-price="2469.0"><title>2026-06-23: $2,469.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="45.8" r="2.5" data-date="2026-06-24" data-price="2454.0"><title>2026-06-24: $2,454.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="34.7" r="2.5" data-date="2026-06-25" data-price="2479.0"><title>2026-06-25: $2,479.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="48.0" r="2.5" data-date="2026-06-26" data-price="2449.0"><title>2026-06-26: $2,449.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="48.0" r="2.5" data-date="2026-06-27" data-price="2449.0"><title>2026-06-27: $2,449.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="36.9" r="2.5" data-date="2026-06-28" data-price="2474.0"><title>2026-06-28: $2,474.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="25.8" r="2.5" data-date="2026-06-29" data-price="2499.0"><title>2026-06-29: $2,499.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="14.7" r="2.5" data-date="2026-06-30" data-price="2524.0"><title>2026-06-30: $2,524.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="8.0" r="2.5" data-date="2026-07-01" data-price="2539.0"><title>2026-07-01: $2,539.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="21.3" r="2.5" data-date="2026-07-02" data-price="2509.0"><title>2026-07-02: $2,509.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="34.7" r="2.5" data-date="2026-07-03" data-price="2479.0"><title>2026-07-03: $2,479.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="25.8" r="2.5" data-date="2026-07-04" data-price="2499.0"><title>2026-07-04: $2,499.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="19.1" r="2.5" data-date="2026-07-05" data-price="2514.0"><title>2026-07-05: $2,514.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="8.0" r="2.5" data-date="2026-07-06" data-price="2539.0"><title>2026-07-06: $2,539.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="21.3" r="2.5" data-date="2026-07-07" data-price="2509.0"><title>2026-07-07: $2,509.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="34.7" r="2.5" data-date="2026-07-08" data-price="2479.0"><title>2026-07-08: $2,479.00</title></circle><circle class="spark-dot" cx="212.0" cy="23.6" r="4" data-date="2026-07-09" data-price="2504.0"><title>2026-07-09: $2,504.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|986" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 986">
+      <div class="unit-card-head">
+        <span class="unit-number">#986</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      <span class="delta delta-up">↑ $20.00 since 2026-07-08</span>
+      <div class="unit-meta">9/6/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,724.00 on 2026-06-19 to $2,699.00 on 2026-07-09"><path d="M 8.0 8.0 L 18.2 14.3 L 28.4 20.6 L 38.6 20.6 L 48.8 20.6 L 59.0 20.6 L 69.2 26.9 L 79.4 16.4 L 89.6 16.4 L 99.8 29.1 L 110.0 35.4 L 120.2 35.4 L 130.4 48.0 L 140.6 48.0 L 150.8 48.0 L 161.0 37.5 L 171.2 26.9 L 181.4 26.9 L 191.6 26.9 L 201.8 26.9 L 212.0 18.5" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="8.0" r="2.5" data-date="2026-06-19" data-price="2724.0"><title>2026-06-19: $2,724.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="14.3" r="2.5" data-date="2026-06-20" data-price="2709.0"><title>2026-06-20: $2,709.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="20.6" r="2.5" data-date="2026-06-21" data-price="2694.0"><title>2026-06-21: $2,694.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="20.6" r="2.5" data-date="2026-06-22" data-price="2694.0"><title>2026-06-22: $2,694.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="20.6" r="2.5" data-date="2026-06-23" data-price="2694.0"><title>2026-06-23: $2,694.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="20.6" r="2.5" data-date="2026-06-24" data-price="2694.0"><title>2026-06-24: $2,694.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="26.9" r="2.5" data-date="2026-06-25" data-price="2679.0"><title>2026-06-25: $2,679.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="16.4" r="2.5" data-date="2026-06-26" data-price="2704.0"><title>2026-06-26: $2,704.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="16.4" r="2.5" data-date="2026-06-27" data-price="2704.0"><title>2026-06-27: $2,704.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="29.1" r="2.5" data-date="2026-06-28" data-price="2674.0"><title>2026-06-28: $2,674.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="35.4" r="2.5" data-date="2026-06-29" data-price="2659.0"><title>2026-06-29: $2,659.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="35.4" r="2.5" data-date="2026-06-30" data-price="2659.0"><title>2026-06-30: $2,659.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="48.0" r="2.5" data-date="2026-07-01" data-price="2629.0"><title>2026-07-01: $2,629.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="48.0" r="2.5" data-date="2026-07-02" data-price="2629.0"><title>2026-07-02: $2,629.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="48.0" r="2.5" data-date="2026-07-03" data-price="2629.0"><title>2026-07-03: $2,629.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="37.5" r="2.5" data-date="2026-07-04" data-price="2654.0"><title>2026-07-04: $2,654.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="26.9" r="2.5" data-date="2026-07-05" data-price="2679.0"><title>2026-07-05: $2,679.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="26.9" r="2.5" data-date="2026-07-06" data-price="2679.0"><title>2026-07-06: $2,679.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="26.9" r="2.5" data-date="2026-07-07" data-price="2679.0"><title>2026-07-07: $2,679.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="26.9" r="2.5" data-date="2026-07-08" data-price="2679.0"><title>2026-07-08: $2,679.00</title></circle><circle class="spark-dot" cx="212.0" cy="18.5" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|992" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 992">
+      <div class="unit-card-head">
+        <span class="unit-number">#992</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,719.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,719.00 on 2026-06-19 to $2,719.00 on 2026-07-09"><path d="M 8.0 41.7 L 18.2 31.2 L 28.4 24.8 L 38.6 16.4 L 48.8 8.0 L 59.0 8.0 L 69.2 14.3 L 79.4 20.6 L 89.6 20.6 L 99.8 26.9 L 110.0 39.6 L 120.2 33.3 L 130.4 24.8 L 140.6 18.5 L 150.8 31.2 L 161.0 22.7 L 171.2 22.7 L 181.4 35.4 L 191.6 48.0 L 201.8 41.7 L 212.0 41.7" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="41.7" r="2.5" data-date="2026-06-19" data-price="2719.0"><title>2026-06-19: $2,719.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="31.2" r="2.5" data-date="2026-06-20" data-price="2744.0"><title>2026-06-20: $2,744.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="24.8" r="2.5" data-date="2026-06-21" data-price="2759.0"><title>2026-06-21: $2,759.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="16.4" r="2.5" data-date="2026-06-22" data-price="2779.0"><title>2026-06-22: $2,779.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="8.0" r="2.5" data-date="2026-06-23" data-price="2799.0"><title>2026-06-23: $2,799.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="8.0" r="2.5" data-date="2026-06-24" data-price="2799.0"><title>2026-06-24: $2,799.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="14.3" r="2.5" data-date="2026-06-25" data-price="2784.0"><title>2026-06-25: $2,784.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="20.6" r="2.5" data-date="2026-06-26" data-price="2769.0"><title>2026-06-26: $2,769.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="20.6" r="2.5" data-date="2026-06-27" data-price="2769.0"><title>2026-06-27: $2,769.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="26.9" r="2.5" data-date="2026-06-28" data-price="2754.0"><title>2026-06-28: $2,754.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="39.6" r="2.5" data-date="2026-06-29" data-price="2724.0"><title>2026-06-29: $2,724.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="33.3" r="2.5" data-date="2026-06-30" data-price="2739.0"><title>2026-06-30: $2,739.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="24.8" r="2.5" data-date="2026-07-01" data-price="2759.0"><title>2026-07-01: $2,759.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="18.5" r="2.5" data-date="2026-07-02" data-price="2774.0"><title>2026-07-02: $2,774.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="31.2" r="2.5" data-date="2026-07-03" data-price="2744.0"><title>2026-07-03: $2,744.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="22.7" r="2.5" data-date="2026-07-04" data-price="2764.0"><title>2026-07-04: $2,764.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="22.7" r="2.5" data-date="2026-07-05" data-price="2764.0"><title>2026-07-05: $2,764.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="35.4" r="2.5" data-date="2026-07-06" data-price="2734.0"><title>2026-07-06: $2,734.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="48.0" r="2.5" data-date="2026-07-07" data-price="2704.0"><title>2026-07-07: $2,704.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="41.7" r="2.5" data-date="2026-07-08" data-price="2719.0"><title>2026-07-08: $2,719.00</title></circle><circle class="spark-dot" cx="212.0" cy="41.7" r="4" data-date="2026-07-09" data-price="2719.0"><title>2026-07-09: $2,719.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|994" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 994">
+      <div class="unit-card-head">
+        <span class="unit-number">#994</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,689.00</div>
+      <span class="delta delta-up">↑ $15.00 since 2026-07-08</span>
+      <div class="unit-meta">8/7/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,714.00 on 2026-06-19 to $2,689.00 on 2026-07-09"><path d="M 8.0 24.8 L 18.2 14.3 L 28.4 8.0 L 38.6 14.3 L 48.8 26.9 L 59.0 20.6 L 69.2 33.3 L 79.4 22.7 L 89.6 29.1 L 99.8 41.7 L 110.0 35.4 L 120.2 48.0 L 130.4 39.6 L 140.6 29.1 L 150.8 35.4 L 161.0 35.4 L 171.2 48.0 L 181.4 41.7 L 191.6 48.0 L 201.8 41.7 L 212.0 35.4" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="24.8" r="2.5" data-date="2026-06-19" data-price="2714.0"><title>2026-06-19: $2,714.00</title></circle><circle class="spark-point-muted" cx="18.2" cy="14.3" r="2.5" data-date="2026-06-20" data-price="2739.0"><title>2026-06-20: $2,739.00</title></circle><circle class="spark-point-muted" cx="28.4" cy="8.0" r="2.5" data-date="2026-06-21" data-price="2754.0"><title>2026-06-21: $2,754.00</title></circle><circle class="spark-point-muted" cx="38.6" cy="14.3" r="2.5" data-date="2026-06-22" data-price="2739.0"><title>2026-06-22: $2,739.00</title></circle><circle class="spark-point-muted" cx="48.8" cy="26.9" r="2.5" data-date="2026-06-23" data-price="2709.0"><title>2026-06-23: $2,709.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="20.6" r="2.5" data-date="2026-06-24" data-price="2724.0"><title>2026-06-24: $2,724.00</title></circle><circle class="spark-point-muted" cx="69.2" cy="33.3" r="2.5" data-date="2026-06-25" data-price="2694.0"><title>2026-06-25: $2,694.00</title></circle><circle class="spark-point-muted" cx="79.4" cy="22.7" r="2.5" data-date="2026-06-26" data-price="2719.0"><title>2026-06-26: $2,719.00</title></circle><circle class="spark-point-muted" cx="89.6" cy="29.1" r="2.5" data-date="2026-06-27" data-price="2704.0"><title>2026-06-27: $2,704.00</title></circle><circle class="spark-point-muted" cx="99.8" cy="41.7" r="2.5" data-date="2026-06-28" data-price="2674.0"><title>2026-06-28: $2,674.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="35.4" r="2.5" data-date="2026-06-29" data-price="2689.0"><title>2026-06-29: $2,689.00</title></circle><circle class="spark-point-muted" cx="120.2" cy="48.0" r="2.5" data-date="2026-06-30" data-price="2659.0"><title>2026-06-30: $2,659.00</title></circle><circle class="spark-point-muted" cx="130.4" cy="39.6" r="2.5" data-date="2026-07-01" data-price="2679.0"><title>2026-07-01: $2,679.00</title></circle><circle class="spark-point-muted" cx="140.6" cy="29.1" r="2.5" data-date="2026-07-02" data-price="2704.0"><title>2026-07-02: $2,704.00</title></circle><circle class="spark-point-muted" cx="150.8" cy="35.4" r="2.5" data-date="2026-07-03" data-price="2689.0"><title>2026-07-03: $2,689.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="35.4" r="2.5" data-date="2026-07-04" data-price="2689.0"><title>2026-07-04: $2,689.00</title></circle><circle class="spark-point-muted" cx="171.2" cy="48.0" r="2.5" data-date="2026-07-05" data-price="2659.0"><title>2026-07-05: $2,659.00</title></circle><circle class="spark-point-muted" cx="181.4" cy="41.7" r="2.5" data-date="2026-07-06" data-price="2674.0"><title>2026-07-06: $2,674.00</title></circle><circle class="spark-point-muted" cx="191.6" cy="48.0" r="2.5" data-date="2026-07-07" data-price="2659.0"><title>2026-07-07: $2,659.00</title></circle><circle class="spark-point-muted" cx="201.8" cy="41.7" r="2.5" data-date="2026-07-08" data-price="2674.0"><title>2026-07-08: $2,674.00</title></circle><circle class="spark-dot" cx="212.0" cy="35.4" r="4" data-date="2026-07-09" data-price="2689.0"><title>2026-07-09: $2,689.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|999" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 999">
+      <div class="unit-card-head">
+        <span class="unit-number">#999</span>
+        
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,599.00</div>
+      <span class="delta delta-up">↑ $50.00 since 2026-07-08</span>
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,549.00 on 2026-07-06 to $2,599.00 on 2026-07-09"><path d="M 8.0 48.0 L 76.0 32.0 L 144.0 48.0 L 212.0 8.0" class="spark-line" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="48.0" r="2.5" data-date="2026-07-06" data-price="2549.0"><title>2026-07-06: $2,549.00</title></circle><circle class="spark-point-muted" cx="76.0" cy="32.0" r="2.5" data-date="2026-07-07" data-price="2569.0"><title>2026-07-07: $2,569.00</title></circle><circle class="spark-point-muted" cx="144.0" cy="48.0" r="2.5" data-date="2026-07-08" data-price="2549.0"><title>2026-07-08: $2,549.00</title></circle><circle class="spark-dot" cx="212.0" cy="8.0" r="4" data-date="2026-07-09" data-price="2599.0"><title>2026-07-09: $2,599.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-06</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card unit-card-gone" data-unit-key="C1B|918" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 918">
+      <div class="unit-card-head">
+        <span class="unit-number">#918</span>
+        <span class="badge badge-gone">Now gone since 2026-07-02</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,259.00</div>
+      <span class="delta delta-up">↑ $25.00 since 2026-06-30</span>
+      
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,329.00 on 2026-06-19 to $2,259.00 on 2026-07-01"><path d="M 8.0 8.0 L 25.0 8.0 L 42.0 8.0 L 59.0 14.3 L 76.0 20.6 L 93.0 10.1 L 110.0 10.1 L 127.0 22.7 L 144.0 35.4 L 161.0 35.4 L 178.0 48.0 L 195.0 48.0 L 212.0 37.5" class="spark-line-muted" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="8.0" r="2.5" data-date="2026-06-19" data-price="2329.0"><title>2026-06-19: $2,329.00</title></circle><circle class="spark-point-muted" cx="25.0" cy="8.0" r="2.5" data-date="2026-06-20" data-price="2329.0"><title>2026-06-20: $2,329.00</title></circle><circle class="spark-point-muted" cx="42.0" cy="8.0" r="2.5" data-date="2026-06-21" data-price="2329.0"><title>2026-06-21: $2,329.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="14.3" r="2.5" data-date="2026-06-22" data-price="2314.0"><title>2026-06-22: $2,314.00</title></circle><circle class="spark-point-muted" cx="76.0" cy="20.6" r="2.5" data-date="2026-06-23" data-price="2299.0"><title>2026-06-23: $2,299.00</title></circle><circle class="spark-point-muted" cx="93.0" cy="10.1" r="2.5" data-date="2026-06-24" data-price="2324.0"><title>2026-06-24: $2,324.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="10.1" r="2.5" data-date="2026-06-25" data-price="2324.0"><title>2026-06-25: $2,324.00</title></circle><circle class="spark-point-muted" cx="127.0" cy="22.7" r="2.5" data-date="2026-06-26" data-price="2294.0"><title>2026-06-26: $2,294.00</title></circle><circle class="spark-point-muted" cx="144.0" cy="35.4" r="2.5" data-date="2026-06-27" data-price="2264.0"><title>2026-06-27: $2,264.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="35.4" r="2.5" data-date="2026-06-28" data-price="2264.0"><title>2026-06-28: $2,264.00</title></circle><circle class="spark-point-muted" cx="178.0" cy="48.0" r="2.5" data-date="2026-06-29" data-price="2234.0"><title>2026-06-29: $2,234.00</title></circle><circle class="spark-point-muted" cx="195.0" cy="48.0" r="2.5" data-date="2026-06-30" data-price="2234.0"><title>2026-06-30: $2,234.00</title></circle><circle class="spark-dot-muted" cx="212.0" cy="37.5" r="4" data-date="2026-07-01" data-price="2259.0"><title>2026-07-01: $2,259.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card unit-card-gone" data-unit-key="C1B|938" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 938">
+      <div class="unit-card-head">
+        <span class="unit-number">#938</span>
+        <span class="badge badge-gone">Now gone since 2026-07-06</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,709.00</div>
+      <span class="delta delta-down">↓ $30.00 since 2026-07-04</span>
+      
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Price trend from $2,714.00 on 2026-06-19 to $2,709.00 on 2026-07-05"><path d="M 8.0 44.4 L 20.8 44.4 L 33.5 29.8 L 46.2 18.9 L 59.0 18.9 L 71.8 8.0 L 84.5 8.0 L 97.2 8.0 L 110.0 18.9 L 122.8 29.8 L 135.5 18.9 L 148.2 18.9 L 161.0 40.7 L 173.8 22.5 L 186.5 44.4 L 199.2 26.2 L 212.0 48.0" class="spark-line-muted" fill="none"/><circle class="spark-point-muted" cx="8.0" cy="44.4" r="2.5" data-date="2026-06-19" data-price="2714.0"><title>2026-06-19: $2,714.00</title></circle><circle class="spark-point-muted" cx="20.8" cy="44.4" r="2.5" data-date="2026-06-20" data-price="2714.0"><title>2026-06-20: $2,714.00</title></circle><circle class="spark-point-muted" cx="33.5" cy="29.8" r="2.5" data-date="2026-06-21" data-price="2734.0"><title>2026-06-21: $2,734.00</title></circle><circle class="spark-point-muted" cx="46.2" cy="18.9" r="2.5" data-date="2026-06-22" data-price="2749.0"><title>2026-06-22: $2,749.00</title></circle><circle class="spark-point-muted" cx="59.0" cy="18.9" r="2.5" data-date="2026-06-23" data-price="2749.0"><title>2026-06-23: $2,749.00</title></circle><circle class="spark-point-muted" cx="71.8" cy="8.0" r="2.5" data-date="2026-06-24" data-price="2764.0"><title>2026-06-24: $2,764.00</title></circle><circle class="spark-point-muted" cx="84.5" cy="8.0" r="2.5" data-date="2026-06-25" data-price="2764.0"><title>2026-06-25: $2,764.00</title></circle><circle class="spark-point-muted" cx="97.2" cy="8.0" r="2.5" data-date="2026-06-26" data-price="2764.0"><title>2026-06-26: $2,764.00</title></circle><circle class="spark-point-muted" cx="110.0" cy="18.9" r="2.5" data-date="2026-06-27" data-price="2749.0"><title>2026-06-27: $2,749.00</title></circle><circle class="spark-point-muted" cx="122.8" cy="29.8" r="2.5" data-date="2026-06-28" data-price="2734.0"><title>2026-06-28: $2,734.00</title></circle><circle class="spark-point-muted" cx="135.5" cy="18.9" r="2.5" data-date="2026-06-29" data-price="2749.0"><title>2026-06-29: $2,749.00</title></circle><circle class="spark-point-muted" cx="148.2" cy="18.9" r="2.5" data-date="2026-06-30" data-price="2749.0"><title>2026-06-30: $2,749.00</title></circle><circle class="spark-point-muted" cx="161.0" cy="40.7" r="2.5" data-date="2026-07-01" data-price="2719.0"><title>2026-07-01: $2,719.00</title></circle><circle class="spark-point-muted" cx="173.8" cy="22.5" r="2.5" data-date="2026-07-02" data-price="2744.0"><title>2026-07-02: $2,744.00</title></circle><circle class="spark-point-muted" cx="186.5" cy="44.4" r="2.5" data-date="2026-07-03" data-price="2714.0"><title>2026-07-03: $2,714.00</title></circle><circle class="spark-point-muted" cx="199.2" cy="26.2" r="2.5" data-date="2026-07-04" data-price="2739.0"><title>2026-07-04: $2,739.00</title></circle><circle class="spark-dot-muted" cx="212.0" cy="48.0" r="4" data-date="2026-07-05" data-price="2709.0"><title>2026-07-05: $2,709.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-06-19</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+          </div>
+        </section>
+        
+</main>
+<footer>Data scraped from liveatcallahomes.com/floorplans. Click any card (or hover a dot) for exact dates and prices.</footer>
+
+<div class="modal-overlay" id="chart-modal">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title">
+    <div class="modal-head">
+      <h2 class="modal-title" id="chart-modal-title">Apartment</h2>
+      <button type="button" class="modal-close" id="chart-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="chart-modal-body"></div>
+  </div>
+</div>
+
+<script>
+var UNIT_DATA = {"B1B|942": {"floorplan": "B1B", "unit": "942", "beds": "2", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2244.0], ["2026-06-20", 2214.0], ["2026-06-21", 2184.0], ["2026-06-22", 2204.0], ["2026-06-23", 2204.0], ["2026-06-24", 2189.0], ["2026-06-25", 2174.0], ["2026-06-26", 2159.0], ["2026-06-27", 2179.0], ["2026-06-28", 2149.0], ["2026-06-29", 2169.0], ["2026-06-30", 2189.0], ["2026-07-01", 2204.0], ["2026-07-02", 2174.0], ["2026-07-03", 2189.0], ["2026-07-04", 2189.0], ["2026-07-05", 2159.0], ["2026-07-06", 2129.0], ["2026-07-07", 2099.0], ["2026-07-08", 2084.0], ["2026-07-09", 2069.0]]}, "C1B|914": {"floorplan": "C1B", "unit": "914", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2714.0], ["2026-06-20", 2729.0], ["2026-06-21", 2699.0], ["2026-06-22", 2714.0], ["2026-06-23", 2699.0], ["2026-06-24", 2719.0], ["2026-06-25", 2739.0], ["2026-06-26", 2759.0], ["2026-06-27", 2774.0], ["2026-06-28", 2774.0], ["2026-06-29", 2759.0], ["2026-06-30", 2759.0], ["2026-07-01", 2774.0], ["2026-07-02", 2774.0], ["2026-07-03", 2799.0], ["2026-07-04", 2824.0], ["2026-07-05", 2794.0], ["2026-07-06", 2819.0], ["2026-07-07", 2844.0], ["2026-07-08", 2829.0], ["2026-07-09", 2849.0]]}, "C1B|918": {"floorplan": "C1B", "unit": "918", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "gone", "gone_since": "2026-07-02", "history": [["2026-06-19", 2329.0], ["2026-06-20", 2329.0], ["2026-06-21", 2329.0], ["2026-06-22", 2314.0], ["2026-06-23", 2299.0], ["2026-06-24", 2324.0], ["2026-06-25", 2324.0], ["2026-06-26", 2294.0], ["2026-06-27", 2264.0], ["2026-06-28", 2264.0], ["2026-06-29", 2234.0], ["2026-06-30", 2234.0], ["2026-07-01", 2259.0]]}, "C1B|924": {"floorplan": "C1B", "unit": "924", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2669.0], ["2026-06-20", 2669.0], ["2026-06-21", 2639.0], ["2026-06-22", 2654.0], ["2026-06-23", 2654.0], ["2026-06-24", 2679.0], ["2026-06-25", 2699.0], ["2026-06-26", 2714.0], ["2026-06-27", 2739.0], ["2026-06-28", 2739.0], ["2026-06-29", 2754.0], ["2026-06-30", 2739.0], ["2026-07-01", 2759.0], ["2026-07-02", 2729.0], ["2026-07-03", 2699.0], ["2026-07-04", 2719.0], ["2026-07-05", 2704.0], ["2026-07-06", 2729.0], ["2026-07-07", 2729.0], ["2026-07-08", 2699.0], ["2026-07-09", 2724.0]]}, "C1B|926": {"floorplan": "C1B", "unit": "926", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2684.0], ["2026-06-20", 2709.0], ["2026-06-21", 2679.0], ["2026-06-22", 2679.0], ["2026-06-23", 2679.0], ["2026-06-24", 2679.0], ["2026-06-25", 2699.0], ["2026-06-26", 2724.0], ["2026-06-27", 2724.0], ["2026-06-28", 2709.0], ["2026-06-29", 2709.0], ["2026-06-30", 2709.0], ["2026-07-01", 2694.0], ["2026-07-02", 2714.0], ["2026-07-03", 2714.0], ["2026-07-04", 2734.0], ["2026-07-05", 2754.0], ["2026-07-06", 2774.0], ["2026-07-07", 2744.0], ["2026-07-08", 2759.0], ["2026-07-09", 2779.0]]}, "C1B|928": {"floorplan": "C1B", "unit": "928", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-06-19", 2684.0], ["2026-06-20", 2699.0], ["2026-06-21", 2719.0], ["2026-06-22", 2704.0], ["2026-06-23", 2689.0], ["2026-06-24", 2689.0], ["2026-06-25", 2689.0], ["2026-06-26", 2689.0], ["2026-06-27", 2709.0], ["2026-06-28", 2729.0], ["2026-06-29", 2744.0], ["2026-06-30", 2729.0], ["2026-07-01", 2749.0], ["2026-07-02", 2749.0], ["2026-07-03", 2774.0], ["2026-07-04", 2799.0], ["2026-07-05", 2824.0], ["2026-07-06", 2794.0], ["2026-07-07", 2779.0], ["2026-07-08", 2804.0], ["2026-07-09", 2774.0]]}, "C1B|936": {"floorplan": "C1B", "unit": "936", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2724.0], ["2026-06-20", 2724.0], ["2026-06-21", 2724.0], ["2026-06-22", 2724.0], ["2026-06-23", 2694.0], ["2026-06-24", 2679.0], ["2026-06-25", 2694.0], ["2026-06-26", 2714.0], ["2026-06-27", 2714.0], ["2026-06-28", 2699.0], ["2026-06-29", 2719.0], ["2026-06-30", 2719.0], ["2026-07-01", 2719.0], ["2026-07-02", 2739.0], ["2026-07-03", 2739.0], ["2026-07-04", 2724.0], ["2026-07-05", 2724.0], ["2026-07-06", 2709.0], ["2026-07-07", 2694.0], ["2026-07-08", 2714.0], ["2026-07-09", 2729.0]]}, "C1B|938": {"floorplan": "C1B", "unit": "938", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "gone", "gone_since": "2026-07-06", "history": [["2026-06-19", 2714.0], ["2026-06-20", 2714.0], ["2026-06-21", 2734.0], ["2026-06-22", 2749.0], ["2026-06-23", 2749.0], ["2026-06-24", 2764.0], ["2026-06-25", 2764.0], ["2026-06-26", 2764.0], ["2026-06-27", 2749.0], ["2026-06-28", 2734.0], ["2026-06-29", 2749.0], ["2026-06-30", 2749.0], ["2026-07-01", 2719.0], ["2026-07-02", 2744.0], ["2026-07-03", 2714.0], ["2026-07-04", 2739.0], ["2026-07-05", 2709.0]]}, "C1B|946": {"floorplan": "C1B", "unit": "946", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2719.0], ["2026-06-20", 2719.0], ["2026-06-21", 2734.0], ["2026-06-22", 2704.0], ["2026-06-23", 2704.0], ["2026-06-24", 2704.0], ["2026-06-25", 2719.0], ["2026-06-26", 2719.0], ["2026-06-27", 2734.0], ["2026-06-28", 2734.0], ["2026-06-29", 2749.0], ["2026-06-30", 2774.0], ["2026-07-01", 2744.0], ["2026-07-02", 2764.0], ["2026-07-03", 2784.0], ["2026-07-04", 2754.0], ["2026-07-05", 2774.0], ["2026-07-06", 2789.0], ["2026-07-07", 2814.0], ["2026-07-08", 2814.0], ["2026-07-09", 2839.0]]}, "C1B|948": {"floorplan": "C1B", "unit": "948", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-06-19", 2719.0], ["2026-06-20", 2719.0], ["2026-06-21", 2689.0], ["2026-06-22", 2689.0], ["2026-06-23", 2689.0], ["2026-06-24", 2674.0], ["2026-06-25", 2674.0], ["2026-06-26", 2644.0], ["2026-06-27", 2664.0], ["2026-06-28", 2684.0], ["2026-06-29", 2684.0], ["2026-06-30", 2699.0], ["2026-07-01", 2724.0], ["2026-07-02", 2709.0], ["2026-07-03", 2724.0], ["2026-07-04", 2694.0], ["2026-07-05", 2719.0], ["2026-07-06", 2739.0], ["2026-07-07", 2739.0], ["2026-07-08", 2764.0], ["2026-07-09", 2784.0]]}, "C1B|954": {"floorplan": "C1B", "unit": "954", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2439.0], ["2026-06-20", 2454.0], ["2026-06-21", 2439.0], ["2026-06-22", 2424.0], ["2026-06-23", 2424.0], ["2026-06-24", 2449.0], ["2026-06-25", 2434.0], ["2026-06-26", 2449.0], ["2026-06-27", 2474.0], ["2026-06-28", 2489.0], ["2026-06-29", 2459.0], ["2026-06-30", 2474.0], ["2026-07-01", 2474.0], ["2026-07-02", 2474.0], ["2026-07-03", 2444.0], ["2026-07-04", 2414.0], ["2026-07-05", 2414.0], ["2026-07-06", 2439.0], ["2026-07-07", 2464.0], ["2026-07-08", 2464.0], ["2026-07-09", 2449.0]]}, "C1B|958": {"floorplan": "C1B", "unit": "958", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-06-19", 2669.0], ["2026-06-20", 2654.0], ["2026-06-21", 2669.0], ["2026-06-22", 2639.0], ["2026-06-23", 2609.0], ["2026-06-24", 2629.0], ["2026-06-25", 2629.0], ["2026-06-26", 2654.0], ["2026-06-27", 2624.0], ["2026-06-28", 2649.0], ["2026-06-29", 2664.0], ["2026-06-30", 2689.0], ["2026-07-01", 2674.0], ["2026-07-02", 2659.0], ["2026-07-03", 2679.0], ["2026-07-04", 2679.0], ["2026-07-05", 2694.0], ["2026-07-06", 2679.0], ["2026-07-07", 2679.0], ["2026-07-08", 2694.0], ["2026-07-09", 2719.0]]}, "C1B|966": {"floorplan": "C1B", "unit": "966", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2714.0], ["2026-06-20", 2714.0], ["2026-06-21", 2699.0], ["2026-06-22", 2714.0], ["2026-06-23", 2739.0], ["2026-06-24", 2759.0], ["2026-06-25", 2779.0], ["2026-06-26", 2764.0], ["2026-06-27", 2784.0], ["2026-06-28", 2784.0], ["2026-06-29", 2784.0], ["2026-06-30", 2804.0], ["2026-07-01", 2824.0], ["2026-07-02", 2824.0], ["2026-07-03", 2824.0], ["2026-07-04", 2839.0], ["2026-07-05", 2839.0], ["2026-07-06", 2809.0], ["2026-07-07", 2794.0], ["2026-07-08", 2779.0], ["2026-07-09", 2749.0]]}, "C1B|968": {"floorplan": "C1B", "unit": "968", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-06-19", 2699.0], ["2026-06-20", 2669.0], ["2026-06-21", 2684.0], ["2026-06-22", 2699.0], ["2026-06-23", 2684.0], ["2026-06-24", 2699.0], ["2026-06-25", 2684.0], ["2026-06-26", 2654.0], ["2026-06-27", 2624.0], ["2026-06-28", 2644.0], ["2026-06-29", 2664.0], ["2026-06-30", 2634.0], ["2026-07-01", 2619.0], ["2026-07-02", 2589.0], ["2026-07-03", 2559.0], ["2026-07-04", 2584.0], ["2026-07-05", 2584.0], ["2026-07-06", 2554.0], ["2026-07-07", 2569.0], ["2026-07-08", 2554.0], ["2026-07-09", 2554.0]]}, "C1B|978": {"floorplan": "C1B", "unit": "978", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2719.0], ["2026-06-20", 2719.0], ["2026-06-21", 2704.0], ["2026-06-22", 2719.0], ["2026-06-23", 2704.0], ["2026-06-24", 2724.0], ["2026-06-25", 2739.0], ["2026-06-26", 2754.0], ["2026-06-27", 2754.0], ["2026-06-28", 2739.0], ["2026-06-29", 2764.0], ["2026-06-30", 2764.0], ["2026-07-01", 2789.0], ["2026-07-02", 2789.0], ["2026-07-03", 2774.0], ["2026-07-04", 2744.0], ["2026-07-05", 2714.0], ["2026-07-06", 2734.0], ["2026-07-07", 2734.0], ["2026-07-08", 2734.0], ["2026-07-09", 2734.0]]}, "C1B|980": {"floorplan": "C1B", "unit": "980", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2449.0], ["2026-06-20", 2449.0], ["2026-06-21", 2474.0], ["2026-06-22", 2494.0], ["2026-06-23", 2464.0], ["2026-06-24", 2484.0], ["2026-06-25", 2504.0], ["2026-06-26", 2524.0], ["2026-06-27", 2494.0], ["2026-06-28", 2464.0], ["2026-06-29", 2464.0], ["2026-06-30", 2484.0], ["2026-07-01", 2484.0], ["2026-07-02", 2509.0], ["2026-07-03", 2534.0], ["2026-07-04", 2504.0], ["2026-07-05", 2489.0], ["2026-07-06", 2474.0], ["2026-07-07", 2459.0], ["2026-07-08", 2474.0], ["2026-07-09", 2474.0]]}, "C1B|984": {"floorplan": "C1B", "unit": "984", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2484.0], ["2026-06-20", 2484.0], ["2026-06-21", 2469.0], ["2026-06-22", 2469.0], ["2026-06-23", 2469.0], ["2026-06-24", 2454.0], ["2026-06-25", 2479.0], ["2026-06-26", 2449.0], ["2026-06-27", 2449.0], ["2026-06-28", 2474.0], ["2026-06-29", 2499.0], ["2026-06-30", 2524.0], ["2026-07-01", 2539.0], ["2026-07-02", 2509.0], ["2026-07-03", 2479.0], ["2026-07-04", 2499.0], ["2026-07-05", 2514.0], ["2026-07-06", 2539.0], ["2026-07-07", 2509.0], ["2026-07-08", 2479.0], ["2026-07-09", 2504.0]]}, "C1B|986": {"floorplan": "C1B", "unit": "986", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2724.0], ["2026-06-20", 2709.0], ["2026-06-21", 2694.0], ["2026-06-22", 2694.0], ["2026-06-23", 2694.0], ["2026-06-24", 2694.0], ["2026-06-25", 2679.0], ["2026-06-26", 2704.0], ["2026-06-27", 2704.0], ["2026-06-28", 2674.0], ["2026-06-29", 2659.0], ["2026-06-30", 2659.0], ["2026-07-01", 2629.0], ["2026-07-02", 2629.0], ["2026-07-03", 2629.0], ["2026-07-04", 2654.0], ["2026-07-05", 2679.0], ["2026-07-06", 2679.0], ["2026-07-07", 2679.0], ["2026-07-08", 2679.0], ["2026-07-09", 2699.0]]}, "C1B|992": {"floorplan": "C1B", "unit": "992", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2719.0], ["2026-06-20", 2744.0], ["2026-06-21", 2759.0], ["2026-06-22", 2779.0], ["2026-06-23", 2799.0], ["2026-06-24", 2799.0], ["2026-06-25", 2784.0], ["2026-06-26", 2769.0], ["2026-06-27", 2769.0], ["2026-06-28", 2754.0], ["2026-06-29", 2724.0], ["2026-06-30", 2739.0], ["2026-07-01", 2759.0], ["2026-07-02", 2774.0], ["2026-07-03", 2744.0], ["2026-07-04", 2764.0], ["2026-07-05", 2764.0], ["2026-07-06", 2734.0], ["2026-07-07", 2704.0], ["2026-07-08", 2719.0], ["2026-07-09", 2719.0]]}, "C1B|994": {"floorplan": "C1B", "unit": "994", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-06-19", 2714.0], ["2026-06-20", 2739.0], ["2026-06-21", 2754.0], ["2026-06-22", 2739.0], ["2026-06-23", 2709.0], ["2026-06-24", 2724.0], ["2026-06-25", 2694.0], ["2026-06-26", 2719.0], ["2026-06-27", 2704.0], ["2026-06-28", 2674.0], ["2026-06-29", 2689.0], ["2026-06-30", 2659.0], ["2026-07-01", 2679.0], ["2026-07-02", 2704.0], ["2026-07-03", 2689.0], ["2026-07-04", 2689.0], ["2026-07-05", 2659.0], ["2026-07-06", 2674.0], ["2026-07-07", 2659.0], ["2026-07-08", 2674.0], ["2026-07-09", 2689.0]]}, "C1B|999": {"floorplan": "C1B", "unit": "999", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-07-06", 2549.0], ["2026-07-07", 2569.0], ["2026-07-08", 2549.0], ["2026-07-09", 2599.0]]}};
+
+(function() {
+  var tooltip = document.createElement('div');
+  tooltip.className = 'chart-tooltip';
+  document.body.appendChild(tooltip);
+
+  function money(v) {
+    return '$' + Number(v).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  function showTooltip(evt, date, price) {
+    tooltip.textContent = date + ': ' + money(price);
+    tooltip.style.display = 'block';
+    moveTooltip(evt);
+  }
+  function moveTooltip(evt) {
+    tooltip.style.left = (evt.clientX + 14) + 'px';
+    tooltip.style.top = (evt.clientY + 14) + 'px';
+  }
+  function hideTooltip() { tooltip.style.display = 'none'; }
+
+  document.addEventListener('mouseover', function(e) {
+    var c = e.target.closest('circle[data-price]');
+    if (c) showTooltip(e, c.getAttribute('data-date'), c.getAttribute('data-price'));
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (tooltip.style.display === 'block') moveTooltip(e);
+  });
+  document.addEventListener('mouseout', function(e) {
+    if (e.target.closest('circle[data-price]')) hideTooltip();
+  });
+
+  var modal = document.getElementById('chart-modal');
+  var modalBody = document.getElementById('chart-modal-body');
+  var modalTitle = document.getElementById('chart-modal-title');
+
+  function buildChart(history) {
+    var width = 640, height = 260, padL = 66, padR = 16, padT = 16, padB = 34;
+    var dates = history.map(function(p) { return p[0]; });
+    var values = history.map(function(p) { return p[1]; });
+    var vmin = Math.min.apply(null, values), vmax = Math.max.apply(null, values);
+    if (vmin === vmax) { vmin -= 50; vmax += 50; }
+    var usableW = width - padL - padR, usableH = height - padT - padB;
+
+    function x(i) { return values.length === 1 ? padL + usableW / 2 : padL + (i / (values.length - 1)) * usableW; }
+    function y(v) { return padT + (1 - (v - vmin) / (vmax - vmin)) * usableH; }
+
+    var gridSteps = 4, gridlines = '', yLabels = '';
+    for (var s = 0; s <= gridSteps; s++) {
+      var v = vmin + (vmax - vmin) * (s / gridSteps);
+      var gy = y(v).toFixed(1);
+      gridlines += '<line x1="' + padL + '" x2="' + (width - padR) + '" y1="' + gy + '" y2="' + gy + '" class="modal-gridline"/>';
+      yLabels += '<text x="' + (padL - 8) + '" y="' + (parseFloat(gy) + 4).toFixed(1) + '" text-anchor="end" class="modal-axis-label">' + money(v) + '</text>';
+    }
+
+    var xLabels = '', labelCount = Math.min(6, dates.length);
+    for (var li = 0; li < labelCount; li++) {
+      var idx = labelCount === 1 ? 0 : Math.round(li * (dates.length - 1) / (labelCount - 1));
+      xLabels += '<text x="' + x(idx).toFixed(1) + '" y="' + (height - 10) + '" text-anchor="middle" class="modal-axis-label">' + dates[idx].slice(5) + '</text>';
+    }
+
+    var pathD = 'M ' + values.map(function(v, i) { return x(i).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' L ');
+    var points = '';
+    values.forEach(function(v, i) {
+      var isLast = i === values.length - 1;
+      points += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="' + (isLast ? 5 : 3) +
+        '" class="' + (isLast ? 'modal-dot' : 'modal-point') + '" data-date="' + dates[i] + '" data-price="' + v + '"/>';
+    });
+
+    return '<svg viewBox="0 0 ' + width + ' ' + height + '" class="modal-chart" role="img">' +
+      gridlines + yLabels + xLabels +
+      '<path d="' + pathD + '" class="modal-line" fill="none"/>' + points + '</svg>';
+  }
+
+  function buildTable(history) {
+    var rows = '';
+    for (var i = 0; i < history.length; i++) {
+      var d = history[i][0], v = history[i][1], deltaCell = '&mdash;';
+      if (i > 0) {
+        var diff = v - history[i - 1][1];
+        if (Math.abs(diff) >= 0.01) {
+          deltaCell = (diff < 0 ? '&darr; ' : '&uarr; ') + money(Math.abs(diff));
+        }
+      }
+      rows += '<tr><td>' + d + '</td><td>' + money(v) + '</td><td>' + deltaCell + '</td></tr>';
+    }
+    return '<table class="modal-table"><thead><tr><th>Date</th><th>Price</th><th>Change</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function openModal(key) {
+    var d = UNIT_DATA[key];
+    if (!d) return;
+    modalTitle.textContent = 'Apartment #' + d.unit + ' (' + d.floorplan + ')';
+    var meta = [];
+    if (d.beds && d.baths) meta.push(d.beds + ' Bed / ' + d.baths + ' Bath');
+    if (d.sqft) meta.push(Number(d.sqft).toLocaleString() + ' sq ft');
+    var html = '<div class="modal-meta">' + meta.join(' &middot; ') + '</div>';
+    if (d.status === 'gone') {
+      html += '<div class="modal-status">Now gone since ' + d.gone_since + '</div>';
+    }
+    html += buildChart(d.history) + buildTable(d.history);
+    modalBody.innerHTML = html;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.unit-card').forEach(function(card) {
+    card.addEventListener('click', function() { openModal(card.getAttribute('data-unit-key')); });
+    card.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(card.getAttribute('data-unit-key')); }
+    });
+  });
+  document.getElementById('chart-modal-close').addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+})();
+</script>
+</body>
+</html>
