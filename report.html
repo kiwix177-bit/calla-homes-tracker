@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calla Homes - daily price tracker</title>
+<style>
+  :root {
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --gridline: #e1e0d9;
+    --border: rgba(11,11,11,0.10);
+    --series-1: #2a78d6;
+    --series-1-muted: #9ec5f4;
+    --good: #006300;
+    --gone-bg: #efefec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19;
+      --page: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --gridline: #2c2c2a;
+      --border: rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+      --series-1-muted: #184f95;
+      --good: #0ca30c;
+      --gone-bg: #232320;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  header { max-width: 1100px; margin: 0 auto 28px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 14px; margin: 0 0 16px; }
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat-tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; min-width: 140px;
+  }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); }
+  .stat-tile .value { font-size: 24px; font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; }
+  .floorplan-section { margin-bottom: 32px; }
+  h2 { font-size: 17px; border-bottom: 1px solid var(--gridline); padding-bottom: 8px; }
+  .floorplan-count { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+  .unit-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px; margin-top: 12px;
+  }
+  .unit-card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; cursor: pointer;
+  }
+  .unit-card:hover, .unit-card:focus-visible {
+    border-color: var(--series-1); outline: none;
+  }
+  .unit-card-gone { background: var(--gone-bg); opacity: 0.65; filter: grayscale(60%); }
+  .unit-card-head { display: flex; justify-content: space-between; align-items: center; }
+  .unit-number { font-weight: 600; font-size: 15px; }
+  .unit-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .unit-price { font-size: 22px; font-weight: 600; margin-top: 6px; }
+  .delta { display: block; font-size: 12px; margin-top: 2px; }
+  .delta-down { color: var(--good); }
+  .delta-up { color: var(--text-secondary); }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .badge-specials { background: var(--series-1-muted); color: var(--text-primary); }
+  .badge-gone { background: var(--gridline); color: var(--text-secondary); }
+  .unit-footnote {
+    font-size: 11px; color: var(--text-muted); margin-top: 6px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .unit-expand-hint { color: var(--series-1); white-space: nowrap; }
+  .sparkline { width: 100%; height: 56px; margin-top: 8px; display: block; }
+  .spark-line { stroke: var(--series-1-muted); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .spark-line-muted { stroke: var(--text-muted); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: 0.6; }
+  .spark-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .spark-dot-muted { fill: var(--text-muted); stroke: var(--surface-1); stroke-width: 2; }
+  .spark-point-muted { fill: var(--series-1-muted); }
+  circle[data-price] { cursor: pointer; }
+  footer { max-width: 1100px; margin: 24px auto; color: var(--text-muted); font-size: 12px; }
+
+  .chart-tooltip {
+    position: fixed; z-index: 1000; pointer-events: none;
+    background: var(--text-primary); color: var(--surface-1);
+    font-size: 12px; padding: 4px 8px; border-radius: 6px;
+    white-space: nowrap; display: none;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(11,11,11,0.5);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px; z-index: 900;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface-1); border-radius: 12px; border: 1px solid var(--border);
+    max-width: 720px; width: 100%; max-height: 88vh; overflow-y: auto;
+    padding: 20px 24px 24px;
+  }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .modal-title { font-size: 18px; font-weight: 600; margin: 0; }
+  .modal-close {
+    background: none; border: none; color: var(--text-secondary); font-size: 22px;
+    line-height: 1; cursor: pointer; padding: 2px 6px;
+  }
+  .modal-close:hover { color: var(--text-primary); }
+  .modal-meta { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+  .modal-status { font-size: 12px; margin-top: 8px; display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--gridline); color: var(--text-secondary); }
+  .modal-chart { width: 100%; height: 260px; margin-top: 16px; display: block; }
+  .modal-line { stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .modal-point { fill: var(--series-1-muted); cursor: pointer; }
+  .modal-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; cursor: pointer; }
+  .modal-gridline { stroke: var(--gridline); stroke-width: 1; }
+  .modal-axis-label { fill: var(--text-muted); font-size: 10px; }
+  .modal-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  .modal-table th, .modal-table td {
+    text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  .modal-table th { color: var(--text-secondary); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Calla Homes - daily price tracker</h1>
+  <p class="subtitle">Last checked 2026-07-09 09:48 PM</p>
+  <div class="stat-row">
+    <div class="stat-tile"><div class="label">Available now</div><div class="value">20</div></div>
+    <div class="stat-tile"><div class="label">Floor plans</div><div class="value">2</div></div>
+    <div class="stat-tile"><div class="label">Gone (tracked)</div><div class="value">0</div></div>
+  </div>
+</header>
+<main>
+
+        <section class="floorplan-section">
+          <h2>B1B <span class="floorplan-count">2 Bed / 2.5 Bath &middot; 1 available</span></h2>
+          <div class="unit-grid">
+            
+    <div class="unit-card" data-unit-key="B1B|942" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 942">
+      <div class="unit-card-head">
+        <span class="unit-number">#942</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">2 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,224.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,224.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2224.0"><title>2026-07-09: $2,224.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+          </div>
+        </section>
+        
+        <section class="floorplan-section">
+          <h2>C1B <span class="floorplan-count">3 Bed / 2.5 Bath &middot; 19 available</span></h2>
+          <div class="unit-grid">
+            
+    <div class="unit-card" data-unit-key="C1B|914" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 914">
+      <div class="unit-card-head">
+        <span class="unit-number">#914</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|918" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 918">
+      <div class="unit-card-head">
+        <span class="unit-number">#918</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,329.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,329.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2329.0"><title>2026-07-09: $2,329.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|924" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 924">
+      <div class="unit-card-head">
+        <span class="unit-number">#924</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|926" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 926">
+      <div class="unit-card-head">
+        <span class="unit-number">#926</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">7/17/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|928" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 928">
+      <div class="unit-card-head">
+        <span class="unit-number">#928</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|936" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 936">
+      <div class="unit-card-head">
+        <span class="unit-number">#936</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|938" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 938">
+      <div class="unit-card-head">
+        <span class="unit-number">#938</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|946" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 946">
+      <div class="unit-card-head">
+        <span class="unit-number">#946</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|948" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 948">
+      <div class="unit-card-head">
+        <span class="unit-number">#948</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|954" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 954">
+      <div class="unit-card-head">
+        <span class="unit-number">#954</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,424.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,424.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2424.0"><title>2026-07-09: $2,424.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|958" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 958">
+      <div class="unit-card-head">
+        <span class="unit-number">#958</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|966" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 966">
+      <div class="unit-card-head">
+        <span class="unit-number">#966</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|968" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 968">
+      <div class="unit-card-head">
+        <span class="unit-number">#968</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,430 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">7/21/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|978" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 978">
+      <div class="unit-card-head">
+        <span class="unit-number">#978</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|980" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 980">
+      <div class="unit-card-head">
+        <span class="unit-number">#980</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,449.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,449.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2449.0"><title>2026-07-09: $2,449.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|984" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 984">
+      <div class="unit-card-head">
+        <span class="unit-number">#984</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,499.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,499.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2499.0"><title>2026-07-09: $2,499.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|986" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 986">
+      <div class="unit-card-head">
+        <span class="unit-number">#986</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">9/6/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|992" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 992">
+      <div class="unit-card-head">
+        <span class="unit-number">#992</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">Available</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+
+    <div class="unit-card" data-unit-key="C1B|994" tabindex="0" role="button"
+         aria-haspopup="dialog" aria-label="View full price history for apartment 994">
+      <div class="unit-card-head">
+        <span class="unit-number">#994</span>
+        <span class="badge badge-specials">Specials</span>
+      </div>
+      <div class="unit-meta">3 Bed / 2.5 Bath &middot; 1,589 sq ft</div>
+      <div class="unit-price">$2,699.00</div>
+      
+      <div class="unit-meta">8/7/2026</div>
+      <svg viewBox="0 0 220 56" class="sparkline" role="img" aria-label="Single price point: $2,699.00 on 2026-07-09"><circle class="spark-dot" cx="110.0" cy="28.0" r="4" data-date="2026-07-09" data-price="2699.0"><title>2026-07-09: $2,699.00</title></circle></svg>
+      <div class="unit-footnote">
+        <span>first seen 2026-07-09</span>
+        <span class="unit-expand-hint">View full history &rarr;</span>
+      </div>
+    </div>
+    
+          </div>
+        </section>
+        
+</main>
+<footer>Data scraped from liveatcallahomes.com/floorplans. Click any card (or hover a dot) for exact dates and prices.</footer>
+
+<div class="modal-overlay" id="chart-modal">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title">
+    <div class="modal-head">
+      <h2 class="modal-title" id="chart-modal-title">Apartment</h2>
+      <button type="button" class="modal-close" id="chart-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="chart-modal-body"></div>
+  </div>
+</div>
+
+<script>
+var UNIT_DATA = {"B1B|942": {"floorplan": "B1B", "unit": "942", "beds": "2", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2224.0]]}, "C1B|914": {"floorplan": "C1B", "unit": "914", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|918": {"floorplan": "C1B", "unit": "918", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2329.0]]}, "C1B|924": {"floorplan": "C1B", "unit": "924", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|926": {"floorplan": "C1B", "unit": "926", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|928": {"floorplan": "C1B", "unit": "928", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|936": {"floorplan": "C1B", "unit": "936", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|938": {"floorplan": "C1B", "unit": "938", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|946": {"floorplan": "C1B", "unit": "946", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|948": {"floorplan": "C1B", "unit": "948", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|954": {"floorplan": "C1B", "unit": "954", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2424.0]]}, "C1B|958": {"floorplan": "C1B", "unit": "958", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|966": {"floorplan": "C1B", "unit": "966", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|968": {"floorplan": "C1B", "unit": "968", "beds": "3", "baths": "2.5", "sqft": 1430, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|978": {"floorplan": "C1B", "unit": "978", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|980": {"floorplan": "C1B", "unit": "980", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2449.0]]}, "C1B|984": {"floorplan": "C1B", "unit": "984", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2499.0]]}, "C1B|986": {"floorplan": "C1B", "unit": "986", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|992": {"floorplan": "C1B", "unit": "992", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}, "C1B|994": {"floorplan": "C1B", "unit": "994", "beds": "3", "baths": "2.5", "sqft": 1589, "status": "active", "gone_since": null, "history": [["2026-07-09", 2699.0]]}};
+
+(function() {
+  var tooltip = document.createElement('div');
+  tooltip.className = 'chart-tooltip';
+  document.body.appendChild(tooltip);
+
+  function money(v) {
+    return '$' + Number(v).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  function showTooltip(evt, date, price) {
+    tooltip.textContent = date + ': ' + money(price);
+    tooltip.style.display = 'block';
+    moveTooltip(evt);
+  }
+  function moveTooltip(evt) {
+    tooltip.style.left = (evt.clientX + 14) + 'px';
+    tooltip.style.top = (evt.clientY + 14) + 'px';
+  }
+  function hideTooltip() { tooltip.style.display = 'none'; }
+
+  document.addEventListener('mouseover', function(e) {
+    var c = e.target.closest('circle[data-price]');
+    if (c) showTooltip(e, c.getAttribute('data-date'), c.getAttribute('data-price'));
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (tooltip.style.display === 'block') moveTooltip(e);
+  });
+  document.addEventListener('mouseout', function(e) {
+    if (e.target.closest('circle[data-price]')) hideTooltip();
+  });
+
+  var modal = document.getElementById('chart-modal');
+  var modalBody = document.getElementById('chart-modal-body');
+  var modalTitle = document.getElementById('chart-modal-title');
+
+  function buildChart(history) {
+    var width = 640, height = 260, padL = 66, padR = 16, padT = 16, padB = 34;
+    var dates = history.map(function(p) { return p[0]; });
+    var values = history.map(function(p) { return p[1]; });
+    var vmin = Math.min.apply(null, values), vmax = Math.max.apply(null, values);
+    if (vmin === vmax) { vmin -= 50; vmax += 50; }
+    var usableW = width - padL - padR, usableH = height - padT - padB;
+
+    function x(i) { return values.length === 1 ? padL + usableW / 2 : padL + (i / (values.length - 1)) * usableW; }
+    function y(v) { return padT + (1 - (v - vmin) / (vmax - vmin)) * usableH; }
+
+    var gridSteps = 4, gridlines = '', yLabels = '';
+    for (var s = 0; s <= gridSteps; s++) {
+      var v = vmin + (vmax - vmin) * (s / gridSteps);
+      var gy = y(v).toFixed(1);
+      gridlines += '<line x1="' + padL + '" x2="' + (width - padR) + '" y1="' + gy + '" y2="' + gy + '" class="modal-gridline"/>';
+      yLabels += '<text x="' + (padL - 8) + '" y="' + (parseFloat(gy) + 4).toFixed(1) + '" text-anchor="end" class="modal-axis-label">' + money(v) + '</text>';
+    }
+
+    var xLabels = '', labelCount = Math.min(6, dates.length);
+    for (var li = 0; li < labelCount; li++) {
+      var idx = labelCount === 1 ? 0 : Math.round(li * (dates.length - 1) / (labelCount - 1));
+      xLabels += '<text x="' + x(idx).toFixed(1) + '" y="' + (height - 10) + '" text-anchor="middle" class="modal-axis-label">' + dates[idx].slice(5) + '</text>';
+    }
+
+    var pathD = 'M ' + values.map(function(v, i) { return x(i).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' L ');
+    var points = '';
+    values.forEach(function(v, i) {
+      var isLast = i === values.length - 1;
+      points += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="' + (isLast ? 5 : 3) +
+        '" class="' + (isLast ? 'modal-dot' : 'modal-point') + '" data-date="' + dates[i] + '" data-price="' + v + '"/>';
+    });
+
+    return '<svg viewBox="0 0 ' + width + ' ' + height + '" class="modal-chart" role="img">' +
+      gridlines + yLabels + xLabels +
+      '<path d="' + pathD + '" class="modal-line" fill="none"/>' + points + '</svg>';
+  }
+
+  function buildTable(history) {
+    var rows = '';
+    for (var i = 0; i < history.length; i++) {
+      var d = history[i][0], v = history[i][1], deltaCell = '&mdash;';
+      if (i > 0) {
+        var diff = v - history[i - 1][1];
+        if (Math.abs(diff) >= 0.01) {
+          deltaCell = (diff < 0 ? '&darr; ' : '&uarr; ') + money(Math.abs(diff));
+        }
+      }
+      rows += '<tr><td>' + d + '</td><td>' + money(v) + '</td><td>' + deltaCell + '</td></tr>';
+    }
+    return '<table class="modal-table"><thead><tr><th>Date</th><th>Price</th><th>Change</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function openModal(key) {
+    var d = UNIT_DATA[key];
+    if (!d) return;
+    modalTitle.textContent = 'Apartment #' + d.unit + ' (' + d.floorplan + ')';
+    var meta = [];
+    if (d.beds && d.baths) meta.push(d.beds + ' Bed / ' + d.baths + ' Bath');
+    if (d.sqft) meta.push(Number(d.sqft).toLocaleString() + ' sq ft');
+    var html = '<div class="modal-meta">' + meta.join(' &middot; ') + '</div>';
+    if (d.status === 'gone') {
+      html += '<div class="modal-status">Now gone since ' + d.gone_since + '</div>';
+    }
+    html += buildChart(d.history) + buildTable(d.history);
+    modalBody.innerHTML = html;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.unit-card').forEach(function(card) {
+    card.addEventListener('click', function() { openModal(card.getAttribute('data-unit-key')); });
+    card.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(card.getAttribute('data-unit-key')); }
+    });
+  });
+  document.getElementById('chart-modal-close').addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+})();
+</script>
+</body>
+</html>
